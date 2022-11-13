@@ -1,49 +1,88 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, slice::Iter};
 
 use crate::{structure::StructureField, Structure};
 
+type SourceAliases = HashMap<String, String>;
+
+/// Definition of a projection field.
 pub struct ProjectionFieldDefinition {
-    source_name: String,
+    /// SQL definition of the field, usally a field name but can be any SQL operation of function.
+    /// Note that the expression "**" is replaced by the source name when expanded. By example:
+    /// `**.thing_id` will turn into `my_source.thing_id` (if source name is
+    /// `my_source` obviously) when expanded. `sum(**.field)` will turn to `sum(my_source.field)`
     definition: String,
+
+    /// Output field name
     name: String,
+
+    /// SQL type of the output field
     sql_type: String,
 }
 
 impl ProjectionFieldDefinition {
+    /// Create field definition from a field structure.
     pub fn from_structure_field(structure_field: &StructureField, source_name: &str) -> Self {
-        let field = structure_field.dump();
+        let (field_name, field_type) = structure_field.dump();
 
         Self {
-            source_name: source_name.to_string(),
-            definition: format!("**.{}", field.0),
-            name: field.0.to_string(),
-            sql_type: field.1.to_string(),
+            definition: format!("{{:{}:}}*.{}", source_name, field_name),
+            name: field_name.to_string(),
+            sql_type: field_type.to_string(),
         }
     }
 
-    pub fn new(source_name: &str, definition: &str, name: &str, sql_type: &str) -> Self {
+    /// Instanciate field definition.
+    pub fn new(definition: &str, name: &str, sql_type: &str) -> Self {
         Self {
-            source_name: source_name.to_string(),
             definition: definition.to_string(),
             name: name.to_string(),
             sql_type: sql_type.to_string(),
         }
     }
 
-    pub fn get_source_name(&self) -> &str {
-        &self.source_name
-    }
+    pub fn expand(&self, source_aliases: &SourceAliases) -> String {
+        let mut definition = self.definition.clone();
 
-    pub fn expand(&self, source_alias: &str) -> String {
+        for (source_name, source_alias) in source_aliases {
+            definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
+        }
         format!(
             "{} as {}",
-            self.definition.replace("**", source_alias),
+            definition,
             self.name
         )
     }
 }
+
 trait Projection {
-    fn expand(&self, source_aliases: HashMap<String, String>) -> String;
+    fn get_fields(&self) -> Iter<&ProjectionFieldDefinition>;
+
+    fn expand(&self, source_aliases: &SourceAliases) -> String {
+        self.get_fields()
+            .map(|def| def.expand(source_aliases))
+            .collect::<Vec<String>>()
+            .join(", ")
+    }
 
     fn get_structure(&self) -> Structure;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestProjection {
+        fields: Vec<ProjectionFieldDefinition>,
+        source_aliases: SourceAliases,
+    }
+
+    impl Projection for TestProjection {
+        fn get_fields(&self) -> Iter<&ProjectionFieldDefinition> {
+            self.fields.iter().collect()
+        }
+
+        fn get_structure(&self) -> Structure {
+        todo!()
+    }
+    }
 }
