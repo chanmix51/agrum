@@ -46,11 +46,7 @@ impl ProjectionFieldDefinition {
         for (source_name, source_alias) in source_aliases {
             definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
         }
-        format!(
-            "{} as {}",
-            definition,
-            self.name
-        )
+        format!("{} as {}", definition, self.name)
     }
 }
 
@@ -78,11 +74,11 @@ mod tests {
 
     impl Projection for TestProjection {
         fn get_fields(&self) -> Iter<&ProjectionFieldDefinition> {
-            self.fields.iter().collect()
+            todo!()
         }
 
         fn get_structure(&self) -> Structure {
-        todo!()
-    }
+            todo!()
+        }
     }
 }
