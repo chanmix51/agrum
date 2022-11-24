@@ -2,6 +2,8 @@ use std::{error::Error, fmt::Display};
 
 use postgres::Row;
 
+use crate::Projection;
+
 /// Error raised during entity hydration process.
 #[derive(Debug)]
 pub enum HydrationError {
@@ -37,4 +39,7 @@ pub trait Entity {
     fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
         Self: Sized;
+
+    /// Create an instance of the [Projection] required to fetch this Entity.
+    fn make_projection(&self) -> Projection;
 }

@@ -21,6 +21,7 @@ impl StructureField {
     }
 }
 /// Structure of a SQL tuple.
+#[derive(Debug, Clone)]
 pub struct Structure {
     fields: Vec<StructureField>,
 }
