@@ -1,4 +1,4 @@
-use std::{collections::HashMap, slice::Iter};
+use std::collections::HashMap;
 
 use crate::{structure::StructureField, Structure};
 

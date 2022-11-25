@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display};
 
 use postgres::Row;
 
-use crate::Projection;
+use crate::Structure;
 
 /// Error raised during entity hydration process.
 #[derive(Debug)]
@@ -11,21 +11,25 @@ pub enum HydrationError {
     InvalidData(String),
 
     /// Error while fetching data from the database.
-    FetchFailed {
+    FieldFetchFailed {
         error: postgres::Error,
         field_index: usize,
     },
+
+    /// Error while fetching the Row from the database.
+    RowFetchFailed(postgres::Error),
 }
 
 impl Display for HydrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidData(msg) => write!(f, "Invalid data error: «{}»", msg),
-            Self::FetchFailed { error, field_index } => write!(
+            Self::FieldFetchFailed { error, field_index } => write!(
                 f,
                 "Fail to fetch data for field index {}, message: «{}».",
                 field_index, error
             ),
+            Self::RowFetchFailed(e) => write!(f, "Fail to fetch the row, message «{}».", e),
         }
     }
 }
@@ -40,6 +44,6 @@ pub trait Entity {
     where
         Self: Sized;
 
-    /// Create an instance of the [Projection] required to fetch this Entity.
-    fn make_projection(&self) -> Projection;
+    /// Create an instance of the [Structure] required to fetch this Entity.
+    fn get_structure() -> Structure;
 }

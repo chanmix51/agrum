@@ -1,4 +1,5 @@
-use agrum::{Entity, Projection, Structure};
+use agrum::{Entity, Projection, Provider, Structure};
+use postgres::Client;
 
 struct WhateverEntity {
     entity_id: u32,
@@ -19,7 +20,8 @@ impl Entity for WhateverEntity {
             something: row.get("something"),
         })
     }
-    fn make_projection(&self) -> Projection {
+
+    fn get_structure() -> Structure {
         let mut structure = Structure::new();
         structure
             .set_field("entity_id", "int")
@@ -27,6 +29,41 @@ impl Entity for WhateverEntity {
             .set_field("has_thing", "bool")
             .set_field("something", "int");
 
-        Projection::from_structure(structure, "whatever")
+        structure
+    }
+}
+
+struct WhateverProvider<'client> {
+    structure: Structure,
+    projection: Projection,
+    pg_client: &'client Client,
+}
+
+impl<'client> WhateverProvider<'client> {
+    pub fn new(pg_client: &'client Client) -> Self {
+        let structure = WhateverEntity::get_structure();
+        let projection = Projection::from_structure(structure.clone(), "whatever");
+
+        Self {
+            structure,
+            projection,
+            pg_client,
+        }
+    }
+}
+
+impl<'client> Provider<'client> for WhateverProvider<'client> {
+    type Entity = WhateverEntity;
+
+    fn get_client(&'client self) -> &'client mut Client {
+        &mut self.pg_client
+    }
+
+    fn get_definition(&self) -> String {
+        todo!()
+    }
+
+    fn get_projection(&self) -> &Projection {
+        todo!()
     }
 }
