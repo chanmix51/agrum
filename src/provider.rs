@@ -1,70 +1,29 @@
-use std::{collections::HashMap, error::Error, marker::PhantomData};
+use std::{collections::HashMap, error::Error, marker::PhantomData, pin::Pin};
 
-use postgres::{fallible_iterator::FallibleIterator, Client, RowIter};
+use async_trait::async_trait;
+use futures::StreamExt;
+use futures_util::{stream::IntoStream, Stream, TryStream, TryStreamExt};
+use tokio_postgres::{Client as PgClient, RowStream};
 
-use super::{Entity, HydrationError, Projection};
+use super::{HydrationError, Projection, SqlEntity};
 
 pub type SourceAliases = HashMap<String, String>;
 
-/// Iterator over query results that yield entities.
-pub struct EntityIterator<'client, T> {
-    iterator: RowIter<'client>,
-    phantom: PhantomData<T>,
-}
-
-impl<'client, T> EntityIterator<'client, T> {
-    /// Instanciate new iterator.
-    pub fn new(iterator: RowIter<'client>) -> Self {
-        Self {
-            iterator,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<'client, T> FallibleIterator for EntityIterator<'client, T>
-where
-    T: Entity,
-{
-    type Item = T;
-    type Error = HydrationError;
-
-    fn next(&mut self) -> Result<Option<Self::Item>, Self::Error> {
-        self.iterator
-            .next()
-            .map_err(|e| HydrationError::RowFetchFailed(e))?
-            .map(|row| T::hydrate(row))
-            .transpose()
-    }
-}
-
 /// A Provider uses an entity associated Projection to issue SQL queries and
 /// return an iterator over results.
-pub trait Provider<'client> {
-    /// Entity returned by the Provider.
-    type Entity;
-
+pub trait Provider<T>
+where
+    T: SqlEntity,
+{
     /// Return the SQL definition of this Provider.
     fn get_definition(&self) -> String;
 
     /// Launch a SQL statement to fetch the associated entities.
     fn find(
-        &'client self,
+        &self,
         condition: &str,
         params: &Vec<&str>,
-    ) -> Result<EntityIterator<'client, Self::Entity>, Box<dyn Error>> {
-        let sql = self.get_definition();
-        let pg_client = self.get_client();
-        let iterator = pg_client.query_raw(&sql, params)?;
-
-        Ok(EntityIterator::new(iterator))
-    }
-
-    /// Share the database client instance.
-    fn get_client(&'client self) -> &'client mut Client;
-
-    /// Share the provider's [Projection].
-    fn get_projection(&self) -> &Projection;
+    ) -> Result<Box<dyn Stream<Item = T>>, Box<dyn Error>>;
 }
 
 #[cfg(test)]

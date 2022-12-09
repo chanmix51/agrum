@@ -6,4 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-postgres = "0.19.4"
+async-trait = "0.1.52"
+futures = "0.3.25"
+futures-util = "0.3.25"
+tokio = {version = "1.22.0", features = ["rt", "macros"]}
+tokio-postgres = "0.7.7"

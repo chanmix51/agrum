@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display};
 
-use postgres::Row;
+use tokio_postgres::{error::Error as PgError, Row};
 
 use crate::Structure;
 
@@ -11,13 +11,10 @@ pub enum HydrationError {
     InvalidData(String),
 
     /// Error while fetching data from the database.
-    FieldFetchFailed {
-        error: postgres::Error,
-        field_index: usize,
-    },
+    FieldFetchFailed { error: PgError, field_index: usize },
 
     /// Error while fetching the Row from the database.
-    RowFetchFailed(postgres::Error),
+    RowFetchFailed(PgError),
 }
 
 impl Display for HydrationError {
@@ -38,7 +35,7 @@ impl Error for HydrationError {}
 
 /// Database entity, this trait defined how entities are hydrated from database
 /// data.
-pub trait Entity {
+pub trait SqlEntity {
     /// create a new Entity from database data in a result row.
     fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
