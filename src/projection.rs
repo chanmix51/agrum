@@ -1,8 +1,26 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Iter, HashMap};
 
 use crate::{structure::StructureField, Structure};
 
-type SourceAliases = HashMap<String, String>;
+#[derive(Debug, Clone)]
+pub struct SourceAliases {
+    aliases: HashMap<String, String>,
+}
+
+impl SourceAliases {
+    pub fn new(aliases: Vec<(&str, &str)>) -> Self {
+        let aliases: HashMap<String, String> = aliases
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+
+        Self { aliases }
+    }
+
+    pub fn iter<'me>(&'me self) -> Iter<'me, String, String> {
+        self.aliases.iter()
+    }
+}
 
 /// Definition of a projection field.
 #[derive(Debug, Clone)]
@@ -45,8 +63,8 @@ impl ProjectionFieldDefinition {
     pub fn expand(&self, source_aliases: &SourceAliases) -> String {
         let mut definition = self.definition.clone();
 
-        for (source_name, source_alias) in source_aliases {
-            definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
+        for (source_name, source_alias) in source_aliases.iter() {
+            definition = definition.replace(&format!("{{:{}:}}", source_name), &source_alias);
         }
         format!("{} as {}", definition, self.name)
     }
@@ -63,13 +81,12 @@ pub struct Projection {
 
 impl Projection {
     pub fn from_structure(structure: Structure, source_name: &str) -> Self {
-        let source_name = source_name.to_string();
         let fields = structure
             .get_definition()
             .iter()
-            .map(|f| ProjectionFieldDefinition::from_structure_field(f, &source_name))
+            .map(|f| ProjectionFieldDefinition::from_structure_field(f, source_name))
             .collect();
-        let source_aliases = [(source_name.clone(), source_name)].into_iter().collect();
+        let source_aliases = SourceAliases::new([(source_name, source_name)].to_vec());
 
         Self {
             structure,
@@ -112,8 +129,7 @@ mod tests {
     #[test]
     fn test_expand() {
         let projection = get_projection();
-        let mut source_aliases = HashMap::new();
-        source_aliases.insert("alias".to_string(), "test_alias".to_string());
+        let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
 
         assert_eq!(
             String::from("test_alias.test_id as test_id, test_alias.something as something, test_alias.is_what as is_what"),
