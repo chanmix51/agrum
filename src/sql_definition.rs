@@ -1,3 +1,5 @@
+use crate::WhereCondition;
+
 pub trait SqlDefinition {
-    fn expand(&self, condition: &str) -> String;
+    fn expand(&self, condition: &WhereCondition) -> String;
 }

@@ -1,6 +1,8 @@
 use std::error::Error;
 
-use agrum::{Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure};
+use agrum::{
+    Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure, WhereCondition,
+};
 use tokio::{self};
 use tokio_postgres::{NoTls, Row};
 
@@ -37,11 +39,11 @@ impl SqlEntity for WhateverEntity {
     }
 }
 
-struct WhateverDefinition {
+struct WhateverSqlDefinition {
     definition: String,
 }
 
-impl WhateverDefinition {
+impl WhateverSqlDefinition {
     pub fn new() -> Self {
         let projection = Projection::from_structure(WhateverEntity::get_structure(), "main")
             .expand(&SourceAliases::new(vec![("main", "whatever")]));
@@ -51,8 +53,8 @@ impl WhateverDefinition {
     }
 }
 
-impl SqlDefinition for WhateverDefinition {
-    fn expand(&self, condition: &str) -> String {
+impl SqlDefinition for WhateverSqlDefinition {
+    fn expand(&self, condition: &WhereCondition) -> String {
         self.definition.clone()
     }
 }
@@ -63,7 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (client, connection) =
         tokio_postgres::connect("host=localhost user=postgres", NoTls).await?;
     let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverDefinition::new()));
+        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.

@@ -6,6 +6,7 @@ mod source;
 mod sql_definition;
 mod structure;
 
+pub use condition::WhereCondition;
 pub use entity::{HydrationError, SqlEntity};
 pub use projection::{Projection, SourceAliases};
 pub use provider::Provider;

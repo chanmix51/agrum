@@ -2,7 +2,7 @@ use std::iter::repeat;
 
 use tokio_postgres::types::ToSql;
 
-pub enum BooleanCondition {
+enum BooleanCondition {
     None,
     Expression(String),
     And(Box<BooleanCondition>, Box<BooleanCondition>),
@@ -60,9 +60,9 @@ impl WhereCondition {
         }
     }
 
-    pub fn expand(&self) -> (String, &Vec<Box<dyn ToSql + Sync>>) {
+    pub fn expand(self) -> (String, Vec<Box<dyn ToSql + Sync>>) {
         let expression = self.condition.expand();
-        let parameters = &self.parameters;
+        let parameters = self.parameters;
 
         (expression, parameters)
     }

@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 
 use tokio_postgres::{types::ToSql, Client as PgClient};
 
+use crate::WhereCondition;
+
 use super::{SqlDefinition, SqlEntity};
 
 pub struct Provider<'client, T>
@@ -35,13 +37,11 @@ where
     }
 
     /// Launch a SQL statement to fetch the associated entities.
-    pub async fn find(
-        &'client self,
-        condition: &str,
-        params: &[&(dyn ToSql + Sync)],
-    ) -> Result<Vec<T>, Box<dyn Error>> {
+    pub async fn find(&'client self, condition: &WhereCondition) -> Result<Vec<T>, Box<dyn Error>> {
         let sql = self.definition.expand(condition);
         let mut items: Vec<T> = Vec::new();
+        let (_expression, parameters) = condition.expand();
+        let params = parameters.as_slice();
 
         for row in self.pg_client.query(&sql, params).await? {
             items.push(T::hydrate(row)?);
