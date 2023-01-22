@@ -1,17 +1,15 @@
-use std::error::Error;
-
 use agrum::{
     Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure, WhereCondition,
 };
 use tokio::{self};
-use tokio_postgres::{NoTls, Row};
+use tokio_postgres::{Client, NoTls, Row};
 
 #[derive(Debug, Clone, PartialEq)]
 struct WhateverEntity {
-    entity_id: u32,
+    entity_id: i32,
     content: String,
     has_thing: bool,
-    something: Option<i64>,
+    something: Option<i32>,
 }
 
 impl SqlEntity for WhateverEntity {
@@ -61,23 +59,28 @@ impl SqlDefinition for WhateverSqlDefinition {
     }
 }
 
-#[tokio::test]
-async fn provider() {
-    // Connect to the database.
+async fn get_client() -> Client {
     let (client, connection) = tokio_postgres::connect("host=postgres.lxc user=greg", NoTls)
         .await
         .unwrap();
-    let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
-
-    // The connection object performs the actual communication with the database,
-    // so spawn it off to run on its own.
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             eprintln!("connection error: {}", e);
         }
     });
 
+    client
+}
+
+#[tokio::test]
+async fn provider_no_filter() {
+    // Connect to the database.
+    let client = get_client().await;
+    let provider: Provider<WhateverEntity> =
+        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
+
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
     let rows = provider.find(WhereCondition::default()).await.unwrap();
 
     assert_eq!(
@@ -97,9 +100,17 @@ async fn provider() {
         ],
         rows
     );
+}
+
+#[tokio::test]
+async fn provider_with_filter() {
+    // Connect to the database.
+    let client = get_client().await;
+    let provider: Provider<WhateverEntity> =
+        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
     let rows = provider
-        .find(WhereCondition::where_in("thing_is", vec![&(1_u32)]))
+        .find(WhereCondition::where_in("thing_id", vec![&(1_i32)]))
         .await
         .unwrap();
 

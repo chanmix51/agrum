@@ -156,7 +156,7 @@ mod tests {
         let (sql, params) = expression.expand();
 
         assert_eq!("true".to_string(), sql);
-        assert_eq!(0, params.len());
+        assert!(params.is_empty());
     }
 
     #[test]
@@ -165,142 +165,142 @@ mod tests {
         let (sql, params) = expression.expand();
 
         assert_eq!("something is not null".to_string(), sql);
-        assert_eq!(0, params.len());
-    }
-
-    #[test]
-    fn expression_sql_and_parameters() {
-        let expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
-        let (sql, params) = expression.expand();
-
-        assert_eq!("balance > ?".to_string(), sql);
-        assert_eq!(1, params.len());
-    }
-
-    #[test]
-    fn expression_where_in() {
-        let expression = WhereCondition::where_in("something", vec![&(0_u32), &(1_u32)]);
-        let (sql, params) = expression.expand();
-
-        assert_eq!("something in (?, ?)".to_string(), sql);
-        assert_eq!(2, params.len());
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_and() {
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
-        expression.and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
+        let mut expression = WhereCondition::new("A", Vec::new());
+        expression.and_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
-        assert_eq!("something is not null and balance > ?".to_string(), sql);
-        assert_eq!(1, params.len());
+        assert_eq!("A and B", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_and_none() {
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
+        let mut expression = WhereCondition::new("A", Vec::new());
         expression.and_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
-        assert_eq!("something is not null".to_string(), sql);
-        assert_eq!(0, params.len());
+        assert_eq!("A", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_none_and() {
         let mut expression = WhereCondition::default();
-        expression.and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
+        expression.and_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
-        assert_eq!("balance > ?".to_string(), sql);
-        assert_eq!(1, params.len());
+        assert_eq!("A", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_or() {
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
-        expression.or_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
+        let mut expression = WhereCondition::new("A", Vec::new());
+        expression.or_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
-        assert_eq!("something is not null or balance > ?".to_string(), sql);
-        assert_eq!(1, params.len());
+        assert_eq!("A or B", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_or_none() {
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
+        let mut expression = WhereCondition::new("A", Vec::new());
         expression.or_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
-        assert_eq!("something is not null".to_string(), sql);
-        assert_eq!(0, params.len());
+        assert_eq!("A", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_none_or() {
         let mut expression = WhereCondition::default();
-        expression.or_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
+        expression.or_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
-        assert_eq!("balance > ?".to_string(), sql);
-        assert_eq!(1, params.len());
+        assert_eq!("A", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_complex_no_precedence() {
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
+        let mut expression = WhereCondition::new("A", Vec::new());
         expression
-            .and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]))
-            .or_where(WhereCondition::new("has_superpower", Vec::new()));
+            .and_where(WhereCondition::new("B", Vec::new()))
+            .or_where(WhereCondition::new("C", Vec::new()));
         let (sql, params) = expression.expand();
 
-        assert_eq!(
-            "something is not null and balance > ? or has_superpower".to_string(),
-            sql
-        );
-        assert_eq!(1, params.len());
+        assert_eq!("A and B or C", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_complex_with_precedence() {
-        let mut sub_expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
-        sub_expression.or_where(WhereCondition::new("has_superpower", Vec::new()));
-        let mut expression = WhereCondition::new("something is not null", Vec::new());
+        let mut sub_expression = WhereCondition::new("A", Vec::new());
+        sub_expression.or_where(WhereCondition::new("B", Vec::new()));
+        let mut expression = WhereCondition::new("C", Vec::new());
         expression.and_where(sub_expression);
         let (sql, params) = expression.expand();
 
-        assert_eq!(
-            "something is not null and (balance > ? or has_superpower)".to_string(),
-            sql
-        );
-        assert_eq!(1, params.len());
+        assert_eq!("C and (A or B)", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_complex_with_self_precedence() {
-        let mut expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
-        expression.or_where(WhereCondition::new("has_superpower", Vec::new()));
-        let sub_expression = WhereCondition::new("something is not null", Vec::new());
+        let mut expression = WhereCondition::new("A", Vec::new());
+        expression.or_where(WhereCondition::new("B", Vec::new()));
+        let sub_expression = WhereCondition::new("C", Vec::new());
         expression.and_where(sub_expression);
         let (sql, params) = expression.expand();
 
-        assert_eq!(
-            "(balance > ? or has_superpower) and something is not null".to_string(),
-            sql
-        );
-        assert_eq!(1, params.len());
+        assert_eq!("(A or B) and C", &sql);
+        assert!(params.is_empty());
     }
 
     #[test]
     fn expression_complex_with_both_precedence() {
-        let mut expression = WhereCondition::new("A > ?", vec![&(0_u32)]);
+        let mut expression = WhereCondition::new("A", Vec::new());
         expression.or_where(WhereCondition::new("B", Vec::new()));
         let mut sub_expression = WhereCondition::new("C", Vec::new());
-        sub_expression.or_where(WhereCondition::where_in("D", vec![&(0u32), &(1_u32)]));
+        sub_expression.or_where(WhereCondition::new("D", Vec::new()));
         expression.and_where(sub_expression);
         let (sql, params) = expression.expand();
 
-        assert_eq!("(A > ? or B) and (C or D in (?, ?))".to_string(), sql);
-        assert_eq!(3, params.len());
+        assert_eq!("(A or B) and (C or D)", &sql);
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn expression_sql_with_parameter() {
+        let expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
+        let (sql, params) = expression.expand();
+
+        assert_eq!("A > $1::pg_type", &sql);
+        assert_eq!(1, params.len());
+    }
+
+    #[test]
+    fn expression_sql_with_multiple_parameters() {
+        let mut expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
+        expression.and_where(WhereCondition::new("B = $?", vec![&(1_i32)]));
+        let (sql, params) = expression.expand();
+
+        assert_eq!("A > $1::pg_type and B = $2", &sql);
+        assert_eq!(2, params.len());
+    }
+    #[test]
+    fn expression_where_in() {
+        let expression = WhereCondition::where_in("A", vec![&(0_i32), &(1_i32)]);
+        let (sql, params) = expression.expand();
+
+        assert_eq!("A in ($1, $2)".to_string(), sql);
+        assert_eq!(2, params.len());
     }
 }
