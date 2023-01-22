@@ -38,12 +38,12 @@ impl BooleanCondition {
     }
 }
 
-pub struct WhereCondition {
+pub struct WhereCondition<'a> {
     condition: BooleanCondition,
-    parameters: Vec<Box<dyn ToSql + Sync>>,
+    parameters: Vec<&'a (dyn ToSql + Sync)>,
 }
 
-impl Default for WhereCondition {
+impl<'a> Default for WhereCondition<'a> {
     fn default() -> Self {
         Self {
             condition: BooleanCondition::None,
@@ -52,22 +52,22 @@ impl Default for WhereCondition {
     }
 }
 
-impl WhereCondition {
-    pub fn new(expression: &str, parameters: Vec<Box<dyn ToSql + Sync>>) -> Self {
+impl<'a> WhereCondition<'a> {
+    pub fn new(expression: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
         Self {
             condition: BooleanCondition::Expression(expression.to_string()),
             parameters,
         }
     }
 
-    pub fn expand(self) -> (String, Vec<Box<dyn ToSql + Sync>>) {
+    pub fn expand(self) -> (String, Vec<&'a (dyn ToSql + Sync)>) {
         let expression = self.condition.expand();
         let parameters = self.parameters;
 
         (expression, parameters)
     }
 
-    pub fn where_in(field: &str, parameters: Vec<Box<dyn ToSql + Sync>>) -> Self {
+    pub fn where_in(field: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
         let params: Vec<&str> = repeat("?").take(parameters.len()).collect();
         let expression = format!("{} in ({})", field, params.join(", "));
 
@@ -77,7 +77,7 @@ impl WhereCondition {
         }
     }
 
-    pub fn and_where(&mut self, mut condition: WhereCondition) -> &mut Self {
+    pub fn and_where(&mut self, mut condition: WhereCondition<'a>) -> &mut Self {
         if condition.condition.is_none() {
             return self;
         }
@@ -95,7 +95,7 @@ impl WhereCondition {
         self
     }
 
-    pub fn or_where(&mut self, mut condition: WhereCondition) -> &mut Self {
+    pub fn or_where(&mut self, mut condition: WhereCondition<'a>) -> &mut Self {
         if condition.condition.is_none() {
             return self;
         }
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn expression_sql_and_parameters() {
-        let expression = WhereCondition::new("balance > ?", vec![Box::new(0 as u32)]);
+        let expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
         let (sql, params) = expression.expand();
 
         assert_eq!("balance > ?".to_string(), sql);
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn expression_where_in() {
-        let expression = WhereCondition::where_in("something", vec![Box::new(1), Box::new(2)]);
+        let expression = WhereCondition::where_in("something", vec![&(0_u32), &(1_u32)]);
         let (sql, params) = expression.expand();
 
         assert_eq!("something in (?, ?)".to_string(), sql);
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn expression_and() {
         let mut expression = WhereCondition::new("something is not null", Vec::new());
-        expression.and_where(WhereCondition::new("balance > ?", vec![Box::new(0)]));
+        expression.and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
         let (sql, params) = expression.expand();
 
         assert_eq!("something is not null and balance > ?".to_string(), sql);
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn expression_none_and() {
         let mut expression = WhereCondition::default();
-        expression.and_where(WhereCondition::new("balance > ?", vec![Box::new(0)]));
+        expression.and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
         let (sql, params) = expression.expand();
 
         assert_eq!("balance > ?".to_string(), sql);
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn expression_or() {
         let mut expression = WhereCondition::new("something is not null", Vec::new());
-        expression.or_where(WhereCondition::new("balance > ?", vec![Box::new(0)]));
+        expression.or_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
         let (sql, params) = expression.expand();
 
         assert_eq!("something is not null or balance > ?".to_string(), sql);
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn expression_none_or() {
         let mut expression = WhereCondition::default();
-        expression.or_where(WhereCondition::new("balance > ?", vec![Box::new(0)]));
+        expression.or_where(WhereCondition::new("balance > ?", vec![&(0_u32)]));
         let (sql, params) = expression.expand();
 
         assert_eq!("balance > ?".to_string(), sql);
@@ -250,7 +250,7 @@ mod tests {
     fn expression_complex_no_precedence() {
         let mut expression = WhereCondition::new("something is not null", Vec::new());
         expression
-            .and_where(WhereCondition::new("balance > ?", vec![Box::new(0)]))
+            .and_where(WhereCondition::new("balance > ?", vec![&(0_u32)]))
             .or_where(WhereCondition::new("has_superpower", Vec::new()));
         let (sql, params) = expression.expand();
 
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn expression_complex_with_precedence() {
-        let mut sub_expression = WhereCondition::new("balance > ?", vec![Box::new(0)]);
+        let mut sub_expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
         sub_expression.or_where(WhereCondition::new("has_superpower", Vec::new()));
         let mut expression = WhereCondition::new("something is not null", Vec::new());
         expression.and_where(sub_expression);
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn expression_complex_with_self_precedence() {
-        let mut expression = WhereCondition::new("balance > ?", vec![Box::new(0)]);
+        let mut expression = WhereCondition::new("balance > ?", vec![&(0_u32)]);
         expression.or_where(WhereCondition::new("has_superpower", Vec::new()));
         let sub_expression = WhereCondition::new("something is not null", Vec::new());
         expression.and_where(sub_expression);
@@ -293,13 +293,10 @@ mod tests {
 
     #[test]
     fn expression_complex_with_both_precedence() {
-        let mut expression = WhereCondition::new("A > ?", vec![Box::new(0)]);
+        let mut expression = WhereCondition::new("A > ?", vec![&(0_u32)]);
         expression.or_where(WhereCondition::new("B", Vec::new()));
         let mut sub_expression = WhereCondition::new("C", Vec::new());
-        sub_expression.or_where(WhereCondition::where_in(
-            "D",
-            vec![Box::new(10), Box::new(11)],
-        ));
+        sub_expression.or_where(WhereCondition::where_in("D", vec![&(0u32), &(1_u32)]));
         expression.and_where(sub_expression);
         let (sql, params) = expression.expand();
 

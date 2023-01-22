@@ -1,12 +1,22 @@
 use std::error::Error;
 use std::marker::PhantomData;
 
-use tokio_postgres::{types::ToSql, Client as PgClient};
+use tokio_postgres::Client as PgClient;
 
 use crate::WhereCondition;
 
-use super::{SqlDefinition, SqlEntity};
+use super::SqlEntity;
 
+/// Whatever that aims to be a database data source (query, table, function
+/// etc.) This has to be the SQL definition as it will be interpreted by
+/// Postgres.
+pub trait SqlDefinition {
+    /// SQL that is sent to Postgres (parameters shall be ?)
+    fn expand(&self, condition: String) -> String;
+}
+
+/// A Provider is a structure that holds the connection and the pipeworks to
+/// actually perform queries.
 pub struct Provider<'client, T>
 where
     T: SqlEntity + Send,
@@ -32,18 +42,20 @@ where
     }
 
     /// Return the SQL definition of this Provider.
-    pub fn get_definition(&self, condition: &str) -> &Box<dyn SqlDefinition> {
+    pub fn get_definition(&self) -> &Box<dyn SqlDefinition> {
         &self.definition
     }
 
     /// Launch a SQL statement to fetch the associated entities.
-    pub async fn find(&'client self, condition: &WhereCondition) -> Result<Vec<T>, Box<dyn Error>> {
-        let sql = self.definition.expand(condition);
+    pub async fn find(
+        &'client self,
+        condition: WhereCondition<'_>,
+    ) -> Result<Vec<T>, Box<dyn Error>> {
+        let (expression, parameters) = condition.expand();
+        let sql = self.definition.expand(expression);
         let mut items: Vec<T> = Vec::new();
-        let (_expression, parameters) = condition.expand();
-        let params = parameters.as_slice();
 
-        for row in self.pg_client.query(&sql, params).await? {
+        for row in self.pg_client.query(&sql, parameters.as_slice()).await? {
             items.push(T::hydrate(row)?);
         }
 

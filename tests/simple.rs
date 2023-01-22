@@ -20,50 +20,53 @@ impl SqlEntity for WhateverEntity {
         Self: Sized,
     {
         Ok(Self {
-            entity_id: row.get("entity_id"),
+            entity_id: row.get("thing_id"),
             content: row.get("content"),
             has_thing: row.get("has_thing"),
-            something: row.get("something"),
+            something: row.get("maybe"),
         })
     }
 
     fn get_structure() -> Structure {
         let mut structure = Structure::new();
         structure
-            .set_field("entity_id", "int")
+            .set_field("thing_id", "int")
             .set_field("content", "text")
             .set_field("has_thing", "bool")
-            .set_field("something", "int");
+            .set_field("maybe", "int");
 
         structure
     }
 }
 
 struct WhateverSqlDefinition {
-    definition: String,
+    projection: Projection,
 }
 
 impl WhateverSqlDefinition {
     pub fn new() -> Self {
-        let projection = Projection::from_structure(WhateverEntity::get_structure(), "main")
-            .expand(&SourceAliases::new(vec![("main", "whatever")]));
-        let sql = format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, something, is_thing, maybe)");
+        let projection = Projection::from_structure(WhateverEntity::get_structure(), "main");
 
-        Self { definition: sql }
+        Self { projection }
     }
 }
 
 impl SqlDefinition for WhateverSqlDefinition {
-    fn expand(&self, condition: &WhereCondition) -> String {
-        self.definition.clone()
+    fn expand(&self, condition: String) -> String {
+        let projection = self
+            .projection
+            .expand(&SourceAliases::new(vec![("main", "whatever")]));
+
+        format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe) where {condition}")
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn provider() {
     // Connect to the database.
-    let (client, connection) =
-        tokio_postgres::connect("host=localhost user=postgres", NoTls).await?;
+    let (client, connection) = tokio_postgres::connect("host=postgres.lxc user=greg", NoTls)
+        .await
+        .unwrap();
     let provider: Provider<WhateverEntity> =
         Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
@@ -75,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let rows = provider.find("", &[]).await?;
+    let rows = provider.find(WhereCondition::default()).await.unwrap();
 
     assert_eq!(
         vec![
@@ -95,5 +98,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         rows
     );
 
-    Ok(())
+    let rows = provider
+        .find(WhereCondition::where_in("thing_is", vec![&(1_u32)]))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        vec![WhateverEntity {
+            entity_id: 1,
+            content: "whatever".to_string(),
+            has_thing: true,
+            something: None,
+        },],
+        rows
+    );
 }
