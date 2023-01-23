@@ -21,15 +21,9 @@ impl StructureField {
     }
 }
 /// Structure of a SQL tuple.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Structure {
     fields: Vec<StructureField>,
-}
-
-impl Default for Structure {
-    fn default() -> Self {
-        Self { fields: Vec::new() }
-    }
 }
 
 impl Structure {
@@ -37,10 +31,7 @@ impl Structure {
         let name = name.to_string();
         let sql_type = sql_type.to_string();
 
-        let definition = StructureField {
-            name: name,
-            sql_type,
-        };
+        let definition = StructureField { name, sql_type };
         self.fields.push(definition);
 
         self

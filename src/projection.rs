@@ -17,7 +17,7 @@ impl SourceAliases {
         Self { aliases }
     }
 
-    pub fn iter<'me>(&'me self) -> Iter<'me, String, String> {
+    pub fn iter(&self) -> Iter<'_, String, String> {
         self.aliases.iter()
     }
 }
@@ -33,29 +33,24 @@ pub struct ProjectionFieldDefinition {
 
     /// Output field name
     name: String,
-
-    /// SQL type of the output field
-    sql_type: String,
 }
 
 impl ProjectionFieldDefinition {
     /// Create field definition from a field structure.
     pub fn from_structure_field(structure_field: &StructureField, source_name: &str) -> Self {
-        let (field_name, field_type) = structure_field.dump();
+        let (field_name, _field_type) = structure_field.dump();
 
         Self {
             definition: format!("{{:{}:}}.{}", source_name, field_name),
             name: field_name.to_string(),
-            sql_type: field_type.to_string(),
         }
     }
 
     /// Instanciate field definition.
-    pub fn new(definition: &str, name: &str, sql_type: &str) -> Self {
+    pub fn new(definition: &str, name: &str) -> Self {
         Self {
             definition: definition.to_string(),
             name: name.to_string(),
-            sql_type: sql_type.to_string(),
         }
     }
 
@@ -64,7 +59,7 @@ impl ProjectionFieldDefinition {
         let mut definition = self.definition.clone();
 
         for (source_name, source_alias) in source_aliases.iter() {
-            definition = definition.replace(&format!("{{:{}:}}", source_name), &source_alias);
+            definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
         }
         format!("{} as {}", definition, self.name)
     }
@@ -76,7 +71,6 @@ impl ProjectionFieldDefinition {
 pub struct Projection {
     structure: Structure,
     fields: Vec<ProjectionFieldDefinition>,
-    source_aliases: SourceAliases,
 }
 
 impl Projection {
@@ -86,13 +80,8 @@ impl Projection {
             .iter()
             .map(|f| ProjectionFieldDefinition::from_structure_field(f, source_name))
             .collect();
-        let source_aliases = SourceAliases::new([(source_name, source_name)].to_vec());
 
-        Self {
-            structure,
-            fields,
-            source_aliases,
-        }
+        Self { structure, fields }
     }
 
     pub fn expand(&self, source_aliases: &SourceAliases) -> String {

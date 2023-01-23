@@ -78,7 +78,7 @@ impl<'a> WhereCondition<'a> {
 
         // Replace parameters placeholders by numerated parameters.
         loop {
-            if expression.find("$?").is_none() {
+            if !expression.contains("$?") {
                 break;
             }
             expression = expression.replacen("$?", &format!("${}", param_index), 1);

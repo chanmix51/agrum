@@ -42,8 +42,8 @@ where
     }
 
     /// Return the SQL definition of this Provider.
-    pub fn get_definition(&self) -> &Box<dyn SqlDefinition> {
-        &self.definition
+    pub fn get_definition(&self) -> &dyn SqlDefinition {
+        self.definition.as_ref()
     }
 
     /// Launch a SQL statement to fetch the associated entities.

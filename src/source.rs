@@ -5,7 +5,7 @@ use crate::{structure::Structure, SqlDefinition};
 pub trait Source {
     /// Return the textual definition of the SQL source by example the fully
     /// qualified name of a table, a SQL query etc.
-    fn get_definition(&self) -> &Box<dyn SqlDefinition>;
+    fn get_definition(&self) -> Box<&dyn SqlDefinition>;
 
     /// Return the structure of the tuple provided by the source.
     fn get_structure(&self) -> Structure;
