@@ -26,7 +26,7 @@ impl SqlEntity for WhateverEntity {
     }
 
     fn get_structure() -> Structure {
-        let mut structure = Structure::new();
+        let mut structure = Structure::default();
         structure
             .set_field("thing_id", "int")
             .set_field("content", "text")
@@ -60,9 +60,8 @@ impl SqlDefinition for WhateverSqlDefinition {
 }
 
 async fn get_client() -> Client {
-    let (client, connection) = tokio_postgres::connect("host=postgres.lxc user=greg", NoTls)
-        .await
-        .unwrap();
+    let config = "host=postgres.lxc user=greg";
+    let (client, connection) = tokio_postgres::connect(config, NoTls).await.unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             eprintln!("connection error: {}", e);
@@ -110,7 +109,10 @@ async fn provider_with_filter() {
         Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
     let rows = provider
-        .find(WhereCondition::where_in("thing_id", vec![&(1_i32)]))
+        .find(WhereCondition::where_in(
+            "thing_id",
+            vec![&1_i32, &12_i32, &15_i32],
+        ))
         .await
         .unwrap();
 

@@ -61,14 +61,35 @@ impl<'a> WhereCondition<'a> {
     }
 
     pub fn expand(self) -> (String, Vec<&'a (dyn ToSql + Sync)>) {
-        let expression = self.condition.expand();
+        let mut expression = self.condition.expand();
         let parameters = self.parameters;
+        let mut param_index = 1;
+
+        // if the number of parameters is different than the parameter
+        // placeholders, the program panics.
+        if expression.matches("$?").count() != parameters.len() {
+            panic!(
+                "Number of parameters in the condition ({}) is different than the number of parameters ({}) in the query “{}”.",
+                parameters.len(),
+                expression.matches("$?").count(),
+                expression
+            );
+        }
+
+        // Replace parameters placeholders by numerated parameters.
+        loop {
+            if expression.find("$?").is_none() {
+                break;
+            }
+            expression = expression.replacen("$?", &format!("${}", param_index), 1);
+            param_index += 1;
+        }
 
         (expression, parameters)
     }
 
     pub fn where_in(field: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
-        let params: Vec<&str> = repeat("?").take(parameters.len()).collect();
+        let params: Vec<&str> = repeat("$?").take(parameters.len()).collect();
         let expression = format!("{} in ({})", field, params.join(", "));
 
         Self {
@@ -295,6 +316,7 @@ mod tests {
         assert_eq!("A > $1::pg_type and B = $2", &sql);
         assert_eq!(2, params.len());
     }
+
     #[test]
     fn expression_where_in() {
         let expression = WhereCondition::where_in("A", vec![&(0_i32), &(1_i32)]);
@@ -302,5 +324,28 @@ mod tests {
 
         assert_eq!("A in ($1, $2)".to_string(), sql);
         assert_eq!(2, params.len());
+    }
+
+    #[test]
+    fn expression_sql_with_multiple_parameters_and_where_in() {
+        let mut expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
+        expression
+            .or_where(WhereCondition::new("B", Vec::new()))
+            .and_where(WhereCondition::where_in(
+                "C",
+                vec![&100_i32, &101_i32, &102_i32],
+            ));
+
+        let (sql, params) = expression.expand();
+
+        assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
+        assert_eq!(4, params.len());
+    }
+
+    #[test]
+    #[should_panic]
+    fn expression_with_wrong_number_of_parameters_panics() {
+        let expression = WhereCondition::new("A > $?::pg_type", Vec::new());
+        let _ = expression.expand();
     }
 }

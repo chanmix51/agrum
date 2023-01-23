@@ -26,11 +26,13 @@ pub struct Structure {
     fields: Vec<StructureField>,
 }
 
-impl Structure {
-    pub fn new() -> Self {
+impl Default for Structure {
+    fn default() -> Self {
         Self { fields: Vec::new() }
     }
+}
 
+impl Structure {
     pub fn set_field(&mut self, name: &str, sql_type: &str) -> &mut Self {
         let name = name.to_string();
         let sql_type = sql_type.to_string();
@@ -57,7 +59,7 @@ mod tests {
     #[test]
     fn use_structure() {
         let structure = {
-            let mut structure = Structure::new();
+            let mut structure = Structure::default();
             structure
                 .set_field("a_field", "a_type")
                 .set_field("another_field", "another_type");

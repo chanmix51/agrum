@@ -117,7 +117,7 @@ mod tests {
     use super::*;
 
     fn get_projection() -> Projection {
-        let mut structure = Structure::new();
+        let mut structure = Structure::default();
         structure
             .set_field("test_id", "int")
             .set_field("something", "text")
