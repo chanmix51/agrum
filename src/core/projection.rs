@@ -1,6 +1,6 @@
 use std::collections::{hash_map::Iter, HashMap};
 
-use crate::{structure::StructureField, Structure};
+use super::{structure::StructureField, Structure};
 
 #[derive(Debug, Clone)]
 pub struct SourceAliases {

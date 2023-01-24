@@ -1,4 +1,4 @@
-use crate::{structure::Structure, SqlDefinition};
+use super::{structure::Structure, SqlDefinition};
 
 /// This represent a SQL data source. It can be a table, a SQL function, a query
 /// etc.

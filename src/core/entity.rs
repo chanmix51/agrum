@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display};
 
 use tokio_postgres::{error::Error as PgError, Row};
 
-use crate::Structure;
+use super::Structure;
 
 /// Error raised during entity hydration process.
 #[derive(Debug)]

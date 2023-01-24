@@ -3,9 +3,7 @@ use std::marker::PhantomData;
 
 use tokio_postgres::Client as PgClient;
 
-use crate::WhereCondition;
-
-use super::SqlEntity;
+use super::{SqlEntity, WhereCondition};
 
 /// Whatever that aims to be a database data source (query, table, function
 /// etc.) This has to be the SQL definition as it will be interpreted by

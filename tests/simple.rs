@@ -1,5 +1,6 @@
-use agrum::{
-    Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure, WhereCondition,
+use agrum::core::{
+    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
+    WhereCondition,
 };
 use tokio::{self};
 use tokio_postgres::{Client, NoTls, Row};
@@ -13,7 +14,7 @@ struct WhateverEntity {
 }
 
 impl SqlEntity for WhateverEntity {
-    fn hydrate(row: Row) -> Result<Self, agrum::HydrationError>
+    fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
         Self: Sized,
     {
