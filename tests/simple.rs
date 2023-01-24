@@ -61,8 +61,8 @@ impl SqlDefinition for WhateverSqlDefinition {
 }
 
 async fn get_client() -> Client {
-    let config = "host=postgres.lxc user=greg";
-    let (client, connection) = tokio_postgres::connect(config, NoTls).await.unwrap();
+    let config = std::fs::read_to_string("tests/config.txt").unwrap();
+    let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             eprintln!("connection error: {}", e);

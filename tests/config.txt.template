@@ -1,0 +1,2 @@
+This file must be a one line file, delete this line and fill the parameters below, remove them if inapplicable.
+host=localhost port=5432 user=yourself pass=1234 dbname=my_db application_name=my_app
