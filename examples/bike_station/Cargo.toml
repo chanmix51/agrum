@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 tokio = {version = "1.22.0", features = ["macros"]}
-tokio-postgres = "0.7.7"
+tokio-postgres = { version = "0.7.7", features = ["with-geo-types-0_7"] }
 agrum = { path = "../../" }
+geo-types = "0.7.8"
+
