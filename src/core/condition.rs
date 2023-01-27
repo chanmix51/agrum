@@ -64,18 +64,7 @@ impl<'a> WhereCondition<'a> {
         let mut expression = self.condition.expand();
         let parameters = self.parameters;
         let mut param_index = 1;
-
-        // if the number of parameters is different than the parameter
-        // placeholders, the program panics.
-        if expression.matches("$?").count() != parameters.len() {
-            panic!(
-                "Number of parameters in the condition ({}) is different than the number of parameters ({}) in the query “{}”.",
-                parameters.len(),
-                expression.matches("$?").count(),
-                expression
-            );
-        }
-
+        //
         // Replace parameters placeholders by numerated parameters.
         loop {
             if !expression.contains("$?") {

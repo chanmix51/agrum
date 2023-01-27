@@ -2,7 +2,7 @@ use agrum::core::{
     HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, SqlSource,
     Structure, WhereCondition,
 };
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 use tokio_postgres::{Client, NoTls};
 
 async fn database_setup(client: &Client) -> Result<(), Box<dyn Error>> {
@@ -59,6 +59,34 @@ impl SqlSource for BikeStationTable {
     }
 }
 
+#[derive(Debug, Default)]
+struct StationMeasureTable;
+
+impl SqlDefinition for StationMeasureTable {
+    fn expand(&self, _condition: String) -> String {
+        "bike_station_app.station_measure".to_owned()
+    }
+}
+
+impl SqlSource for StationMeasureTable {
+    fn get_definition(&self) -> &dyn SqlDefinition {
+        self
+    }
+
+    fn get_structure(&self) -> Structure {
+        let mut structure = Structure::default();
+        structure
+            .set_field("station_measure_id", "public.uuid")
+            .set_field("bike_station_id", "int")
+            .set_field("probed_at", "timestamptz")
+            .set_field("total_slots", "int2")
+            .set_field("working_slots", "int2")
+            .set_field("available_slots", "int2");
+
+        structure
+    }
+}
+
 #[derive(Debug)]
 struct ShortBikeStation {
     bike_station_id: i32,
@@ -103,19 +131,33 @@ impl SqlEntity for ShortBikeStation {
 }
 
 struct ShortBikeStationDefinition {
-    projection: Projection,
+    sources: HashMap<String, Box<dyn SqlSource>>,
 }
 
 impl ShortBikeStationDefinition {
     pub fn new() -> Box<Self> {
-        let mut projection =
-            Projection::from_structure(BikeStationTable::default().get_structure(), "station");
+        let mut sources: HashMap<String, Box<dyn SqlSource>> = HashMap::new();
+        sources.insert(
+            "bike_station".to_string(),
+            Box::new(BikeStationTable::default()),
+        );
+        sources.insert(
+            "station_measure".to_string(),
+            Box::new(StationMeasureTable::default()),
+        );
+
+        Box::new(Self { sources })
+    }
+
+    fn get_projection(&self) -> Projection {
+        let structure = self.sources.get("bike_station").unwrap().get_structure();
+        let mut projection = Projection::from_structure(structure, "station");
         projection
             .add_field("{:measure:}.total_slots", "total_slots")
             .add_field("{:measure:}.working_slots", "working_slots")
             .add_field("{:measure:}.available_slots", "available_slots");
 
-        Box::new(Self { projection })
+        projection
     }
 }
 
@@ -125,14 +167,16 @@ impl SqlDefinition for ShortBikeStationDefinition {
             ("station", "bike_station"),
             ("measure", "last_measure"),
         ]);
-        let projection = self.projection.expand(&source_aliases);
+        let projection = self.get_projection().expand(&source_aliases);
         let sql = r#"
+with
+parameters as (select $?::point as current_position)
 select
   {projection}
-from bike_station_app.bike_station as bike_station
+from {station} as bike_station
   inner join lateral (
     select total_slots, working_slots, available_slots
-    from bike_station_app.station_measure as station_measure
+    from {measure} as station_measure
     where station_measure.bike_station_id = bike_station.bike_station_id
     order by probed_at desc
     limit 1
@@ -141,6 +185,24 @@ where {condition}"#;
 
         sql.replace("{projection}", &projection)
             .replace("{condition}", &condition)
+            .replace(
+                "{station}",
+                &self
+                    .sources
+                    .get("bike_station")
+                    .unwrap()
+                    .get_definition()
+                    .expand(String::new()),
+            )
+            .replace(
+                "{measure}",
+                &self
+                    .sources
+                    .get("station_measure")
+                    .unwrap()
+                    .get_definition()
+                    .expand(String::new()),
+            )
     }
 }
 
@@ -163,8 +225,15 @@ async fn main() {
     println!("database created successfuly");
     let provider: Provider<ShortBikeStation> =
         Provider::new(&client, ShortBikeStationDefinition::new());
+    let condition = WhereCondition::new(
+        "circle(parameters.current_position, 0.005) @> coords",
+        vec![&geo_types::Point(geo_types::Coord {
+            x: 47.222271,
+            y: -1.555264,
+        })],
+    );
+    let rows = provider.find(condition).await.unwrap();
 
-    let rows = provider.find(WhereCondition::default()).await.unwrap();
     for row in rows {
         println!("ROW = '{:?}'.", row);
     }
