@@ -37,7 +37,7 @@ impl Structure {
         self
     }
 
-    pub fn get_definition(&self) -> &Vec<StructureField> {
+    pub fn get_fields(&self) -> &Vec<StructureField> {
         &self.fields
     }
 }
@@ -70,7 +70,7 @@ mod tests {
                 }
             ]
             .to_vec(),
-            structure.get_definition()
+            structure.get_fields()
         );
     }
 }
