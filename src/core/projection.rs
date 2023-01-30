@@ -76,12 +76,27 @@ pub struct Projection {
 impl Projection {
     pub fn from_structure(structure: Structure, source_name: &str) -> Self {
         let fields = structure
-            .get_definition()
+            .get_fields()
             .iter()
             .map(|f| ProjectionFieldDefinition::from_structure_field(f, source_name))
             .collect();
 
         Self { structure, fields }
+    }
+
+    pub fn set_field(&mut self, field_definition: &str, field_alias: &str) -> &mut Self {
+        let definition = ProjectionFieldDefinition::new(field_definition, field_alias);
+
+        for field in self.fields.as_mut_slice() {
+            if &field.name == field_alias {
+                *field = definition;
+
+                return self;
+            }
+        }
+        self.fields.push(definition);
+
+        self
     }
 
     pub fn expand(&self, source_aliases: &SourceAliases) -> String {
@@ -93,7 +108,7 @@ impl Projection {
     }
 
     pub fn get_fields(&self) -> &[ProjectionFieldDefinition] {
-        self.fields.iter().as_slice()
+        self.fields.as_slice()
     }
 
     pub fn get_structure(&self) -> &Structure {
@@ -122,6 +137,33 @@ mod tests {
 
         assert_eq!(
             String::from("test_alias.test_id as test_id, test_alias.something as something, test_alias.is_what as is_what"),
+            projection.expand(&source_aliases)
+        );
+    }
+
+    #[test]
+    fn test_set_field() {
+        let mut projection = get_projection();
+        let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
+
+        projection
+            .set_field("age({:alias:}.born_at)", "how_old")
+            .set_field("{:alias:}.is_ok", "is_ok");
+
+        assert_eq!(
+            String::from("test_alias.test_id as test_id, test_alias.something as something, test_alias.is_what as is_what, age(test_alias.born_at) as how_old, test_alias.is_ok as is_ok"),
+            projection.expand(&source_aliases)
+        );
+    }
+
+    #[test]
+    fn redefine_field() {
+        let mut projection = get_projection();
+        let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
+        projection.set_field("initcap({:alias:}.something)", "something");
+
+        assert_eq!(
+            String::from("test_alias.test_id as test_id, initcap(test_alias.something) as something, test_alias.is_what as is_what"),
             projection.expand(&source_aliases)
         );
     }
