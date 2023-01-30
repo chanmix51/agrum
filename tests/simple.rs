@@ -25,17 +25,6 @@ impl SqlEntity for WhateverEntity {
             something: row.get("maybe"),
         })
     }
-
-    fn get_structure() -> Structure {
-        let mut structure = Structure::default();
-        structure
-            .set_field("thing_id", "int")
-            .set_field("content", "text")
-            .set_field("has_thing", "bool")
-            .set_field("maybe", "int");
-
-        structure
-    }
 }
 
 struct WhateverSqlDefinition {
@@ -44,7 +33,13 @@ struct WhateverSqlDefinition {
 
 impl WhateverSqlDefinition {
     pub fn new() -> Self {
-        let projection = Projection::from_structure(WhateverEntity::get_structure(), "main");
+        let mut structure = Structure::default();
+        structure
+            .set_field("thing_id", "int")
+            .set_field("content", "text")
+            .set_field("has_thing", "bool")
+            .set_field("maybe", "int");
+        let projection = Projection::from_structure(structure, "main");
 
         Self { projection }
     }

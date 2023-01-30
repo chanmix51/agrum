@@ -40,6 +40,12 @@ impl Structure {
     pub fn get_fields(&self) -> &Vec<StructureField> {
         &self.fields
     }
+
+    pub fn get_names(&self) -> Vec<&str> {
+        let names: Vec<&str> = self.fields.iter().map(|f| f.name.as_str()).collect();
+
+        names
+    }
 }
 
 #[cfg(test)]
@@ -47,16 +53,18 @@ mod tests {
 
     use super::*;
 
+    fn get_structure() -> Structure {
+        let mut structure = Structure::default();
+        structure
+            .set_field("a_field", "a_type")
+            .set_field("another_field", "another_type");
+
+        structure
+    }
+
     #[test]
     fn use_structure() {
-        let structure = {
-            let mut structure = Structure::default();
-            structure
-                .set_field("a_field", "a_type")
-                .set_field("another_field", "another_type");
-
-            structure
-        };
+        let structure = get_structure();
 
         assert_eq!(
             &[
@@ -72,5 +80,11 @@ mod tests {
             .to_vec(),
             structure.get_fields()
         );
+    }
+
+    #[test]
+    fn get_names() {
+        let structure = get_structure();
+        assert_eq!(vec!["a_field", "another_field"], structure.get_names());
     }
 }

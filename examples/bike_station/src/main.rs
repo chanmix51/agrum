@@ -1,9 +1,10 @@
-use agrum::core::{
-    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, SqlSource,
-    Structure, WhereCondition,
-};
-use std::collections::HashMap;
+use comfy_table::Table;
+use geo_types::Coord;
 use tokio_postgres::{Client, NoTls};
+
+use std::collections::HashMap;
+
+use agrum::core::*;
 
 mod tables;
 use tables::{BikeStationTable, StationMeasureTable};
@@ -13,7 +14,7 @@ struct ShortBikeStation {
     bike_station_id: i32,
     name: String,
     coords: geo_types::Point<f64>,
-    distance: f64,
+    distance_m: i32,
     total_slots: i16,
     working_slots: i16,
     available_slots: i16,
@@ -29,7 +30,7 @@ impl SqlEntity for ShortBikeStation {
             bike_station_id: row.get("bike_station_id"),
             name: row.get("name"),
             coords: row.get("coords"),
-            distance: row.get("distance"),
+            distance_m: row.get("distance_m"),
             total_slots: row.get("total_slots"),
             working_slots: row.get("working_slots"),
             available_slots: row.get("available_slots"),
@@ -38,27 +39,13 @@ impl SqlEntity for ShortBikeStation {
 
         Ok(entity)
     }
-
-    fn get_structure() -> Structure {
-        let mut structure = Structure::default();
-        structure
-            .set_field("bike_station_id", "int")
-            .set_field("name", "text")
-            .set_field("distance", "float")
-            .set_field("coords", "point")
-            .set_field("total_slots", "int")
-            .set_field("working_slots", "int")
-            .set_field("available_slots", "int");
-
-        structure
-    }
 }
 
-struct FindShortBikeStationAround {
+struct FindShortBikeStationAroundDefinition {
     sources: HashMap<String, Box<dyn SqlSource>>,
 }
 
-impl FindShortBikeStationAround {
+impl FindShortBikeStationAroundDefinition {
     pub fn new() -> Box<Self> {
         let mut sources: HashMap<String, Box<dyn SqlSource>> = HashMap::new();
         sources.insert(
@@ -77,19 +64,20 @@ impl FindShortBikeStationAround {
         let structure = self.sources.get("bike_station").unwrap().get_structure();
         let mut projection = Projection::from_structure(structure, "station");
         projection
-            .add_field(
-                "({:station:}.coords <-> parameters.current_position) * 113432",
-                "distance",
+            .set_field("initcap({:station:}.name)", "name")
+            .set_field(
+                "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int",
+                "distance_m",
             )
-            .add_field("{:measure:}.total_slots", "total_slots")
-            .add_field("{:measure:}.working_slots", "working_slots")
-            .add_field("{:measure:}.available_slots", "available_slots");
+            .set_field("{:measure:}.total_slots", "total_slots")
+            .set_field("{:measure:}.working_slots", "working_slots")
+            .set_field("{:measure:}.available_slots", "available_slots");
 
         projection
     }
 }
 
-impl SqlDefinition for FindShortBikeStationAround {
+impl SqlDefinition for FindShortBikeStationAroundDefinition {
     fn expand(&self, condition: String) -> String {
         let source_aliases = SourceAliases::new(vec![
             ("station", "bike_station"),
@@ -110,7 +98,7 @@ from {station} as bike_station
     limit 1
     ) as last_measure on true
 where {condition}
-order by distance asc"#;
+order by distance_m asc"#;
 
         sql.replace("{projection}", &projection)
             .replace("{condition}", &condition)
@@ -135,9 +123,16 @@ order by distance asc"#;
     }
 }
 
-struct ShortBikeStationsAroundProvider<'client>(Provider<'client, ShortBikeStation>);
+struct ShortBikeStationsAroundFinder<'client>(Provider<'client, ShortBikeStation>);
 
-impl<'client> ShortBikeStationsAroundProvider<'client> {
+impl<'client> ShortBikeStationsAroundFinder<'client> {
+    pub fn new(client: &'client Client) -> Self {
+        Self(Provider::new(
+            &client,
+            FindShortBikeStationAroundDefinition::new(),
+        ))
+    }
+
     pub async fn find_short_stations_around(
         &self,
         position: &geo_types::Point,
@@ -169,11 +164,47 @@ async fn main() {
     println!("database cleaned successfuly");
     tables::database_setup(&client).await.unwrap();
     println!("database created successfuly");
-    let provider =
-        ShortBikeStationsAroundProvider(Provider::new(&client, FindShortBikeStationAround::new()));
-    /*
-       for row in rows {
-           println!("ROW = '{:?}'.", row);
-       }
-    */
+    let finder = ShortBikeStationsAroundFinder::new(&client);
+    let rows = finder
+        .find_short_stations_around(
+            &geo_types::Point(Coord {
+                x: 47.22226827156824,
+                y: -1.5541691161031304,
+            }),
+            0.0035,
+        )
+        .await;
+
+    let mut table = Table::new();
+    let headers: Vec<&str> = vec![
+        "station ID",
+        "name",
+        "distance (m)",
+        "coordinates",
+        "slots",
+        "online slots",
+        "available slots",
+        "has bank",
+    ];
+    table.set_header(headers);
+
+    for row in rows {
+        let display: Vec<String> = vec![
+            format!("{}", &row.bike_station_id),
+            row.name.to_owned(),
+            format!("{}", &row.distance_m),
+            format!("{:?}", &row.coords),
+            format!("{}", &row.total_slots),
+            format!("{}", &row.working_slots),
+            format!("{}", &row.available_slots),
+            if row.has_bank {
+                "YES".to_string()
+            } else {
+                "NO".to_string()
+            },
+        ];
+        table.add_row(display);
+    }
+
+    println!("{table}");
 }

@@ -2,8 +2,6 @@ use std::{error::Error, fmt::Display};
 
 use tokio_postgres::{error::Error as PgError, Row};
 
-use super::Structure;
-
 /// Error raised during entity hydration process.
 #[derive(Debug)]
 pub enum HydrationError {
@@ -40,7 +38,4 @@ pub trait SqlEntity {
     fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
         Self: Sized;
-
-    /// Create an instance of the [Structure] required to fetch this Entity.
-    fn get_structure() -> Structure;
 }

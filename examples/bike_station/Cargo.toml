@@ -10,4 +10,5 @@ tokio = {version = "1.22.0", features = ["macros"]}
 tokio-postgres = { version = "0.7.7", features = ["with-geo-types-0_7"] }
 agrum = { path = "../../" }
 geo-types = "0.7.8"
+comfy-table = "6.1.4"
 
