@@ -1,3 +1,5 @@
+// This code should be generated automatically.
+
 use tokio_postgres::Client;
 
 use std::error::Error;
