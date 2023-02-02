@@ -39,6 +39,18 @@ impl<'client> BikeStationFinderService<'client> {
         let sql = "select * from bike_station where bike_station_id = $1";
         let rows = self.db_client
             .query(&sql, &[bike_station_id]).await?;
+        let bike_station = rows.first()
+            .map(|row| BikeStation { 
+                bike_station_id: row.get("bike_station_id"),
+                designation: row.get("designation"),
+                coords: row.get("coords"),
+                has_bank: row.get("has_bank"),
+                });
+        
+        Ok(bike_station)
     }
 }
 ```
+
+She stars at the code she just wrote liking how elegantly the Rust language allowed to express what she wants, dealing with error and memory management in a concise way. She very likes the part where she says « take the first row of the result and if it exists, convert it to a `BikeStation` instance.
+Inserting this piece of code in her existing project is a very easy task and she goes to bed with the feeling of a day that saw things well done.
