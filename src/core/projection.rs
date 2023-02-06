@@ -1,6 +1,9 @@
-use std::collections::{hash_map::Iter, HashMap};
+use std::{
+    collections::{hash_map::Iter, HashMap},
+    marker::PhantomData,
+};
 
-use super::{structure::StructureField, Structure};
+use super::{structure::StructureField, SqlEntity, Structure};
 
 #[derive(Debug, Clone)]
 pub struct SourceAliases {
@@ -68,7 +71,10 @@ impl ProjectionFieldDefinition {
 /// A Projection defines what is output from a query in order to hydrate a
 /// [SQLEntity]
 #[derive(Debug, Clone)]
-pub struct Projection {
+pub struct Projection<T>
+where
+    T: SqlEntity,
+{
     structure: Structure,
     fields: Vec<ProjectionFieldDefinition>,
 }
