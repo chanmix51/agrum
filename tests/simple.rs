@@ -1,6 +1,6 @@
 use agrum::core::{
-    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
-    WhereCondition,
+    DbProvider, HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity,
+    Structure, WhereCondition,
 };
 use tokio::{self};
 use tokio_postgres::{Client, NoTls, Row};
@@ -71,8 +71,8 @@ async fn get_client() -> Client {
 async fn provider_no_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
+    let provider: DbProvider<WhateverEntity> =
+        DbProvider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
@@ -101,8 +101,8 @@ async fn provider_no_filter() {
 async fn provider_with_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
+    let provider: DbProvider<WhateverEntity> =
+        DbProvider::new(&client, Box::new(WhateverSqlDefinition::new()));
 
     let rows = provider
         .find(WhereCondition::where_in(

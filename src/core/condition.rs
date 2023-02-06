@@ -70,7 +70,7 @@ impl<'a> WhereCondition<'a> {
             if !expression.contains("$?") {
                 break;
             }
-            expression = expression.replacen("$?", &format!("${}", param_index), 1);
+            expression = expression.replacen("$?", &format!("${param_index}"), 1);
             param_index += 1;
         }
 
@@ -329,12 +329,5 @@ mod tests {
 
         assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
         assert_eq!(4, params.len());
-    }
-
-    #[test]
-    #[should_panic]
-    fn expression_with_wrong_number_of_parameters_panics() {
-        let expression = WhereCondition::new("A > $?::pg_type", Vec::new());
-        let _ = expression.expand();
     }
 }

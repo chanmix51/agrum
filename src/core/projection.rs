@@ -41,7 +41,7 @@ impl ProjectionFieldDefinition {
         let (field_name, _field_type) = structure_field.dump();
 
         Self {
-            definition: format!("{{:{}:}}.{}", source_name, field_name),
+            definition: format!("{{:{source_name}:}}.{field_name}"),
             name: field_name.to_string(),
         }
     }
@@ -59,7 +59,7 @@ impl ProjectionFieldDefinition {
         let mut definition = self.definition.clone();
 
         for (source_name, source_alias) in source_aliases.iter() {
-            definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
+            definition = definition.replace(&format!("{{:{source_name}:}}"), source_alias);
         }
         format!("{} as {}", definition, self.name)
     }
@@ -88,7 +88,7 @@ impl Projection {
         let definition = ProjectionFieldDefinition::new(field_definition, field_alias);
 
         for field in self.fields.as_mut_slice() {
-            if &field.name == field_alias {
+            if field.name == field_alias {
                 *field = definition;
 
                 return self;
