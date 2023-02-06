@@ -36,15 +36,18 @@ pub struct ProjectionFieldDefinition {
 
     /// Output field name
     name: String,
+
+    /// Source name
+    source: String,
 }
 
 impl ProjectionFieldDefinition {
     /// Create field definition from a field structure.
-    pub fn from_structure_field(structure_field: &StructureField, source_name: &str) -> Self {
+    pub fn from_structure_field(structure_field: &StructureField) -> Self {
         let (field_name, _field_type) = structure_field.dump();
 
         Self {
-            definition: format!("{{:{}:}}.{}", source_name, field_name),
+            definition: format!("{{:source:}}.{}", field_name),
             name: field_name.to_string(),
         }
     }
