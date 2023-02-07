@@ -39,6 +39,25 @@ impl SqlEntity for ShortBikeStation {
 
         Ok(entity)
     }
+
+    fn sql_projection() -> Projection {
+        let mut projection = Projection::default();
+        projection
+            .set_field("bike_station_id", "{:station:}.bike_station_id", "int")
+            .set_field("name", "initcap({:station:}.name)", "text")
+            .set_field("coords", "{:station:}.coords", "point")
+            .set_field(
+                "distance_m",
+                "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int",
+                "int",
+            )
+            .set_field("total_slots", "{:measure:}.total_slots", "int")
+            .set_field("working_slots", "{:measure:}.working_slots","int")
+            .set_field("available_slots", "{:measure:}.available_slots", "int")
+            .set_field("has_bank", "{:station:}.has_bank", "bool");
+
+        projection
+    }
 }
 
 struct FindShortBikeStationAroundDefinition {
@@ -59,22 +78,6 @@ impl FindShortBikeStationAroundDefinition {
 
         Box::new(Self { sources })
     }
-
-    fn get_projection(&self) -> Projection {
-        let structure = self.sources.get("bike_station").unwrap().get_structure();
-        let mut projection = Projection::from_structure(structure, "station");
-        projection
-            .set_field("initcap({:station:}.name)", "name")
-            .set_field(
-                "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int",
-                "distance_m",
-            )
-            .set_field("{:measure:}.total_slots", "total_slots")
-            .set_field("{:measure:}.working_slots", "working_slots")
-            .set_field("{:measure:}.available_slots", "available_slots");
-
-        projection
-    }
 }
 
 impl SqlDefinition for FindShortBikeStationAroundDefinition {
@@ -83,7 +86,7 @@ impl SqlDefinition for FindShortBikeStationAroundDefinition {
             ("station", "bike_station"),
             ("measure", "last_measure"),
         ]);
-        let projection = self.get_projection().expand(&source_aliases);
+        let projection = ShortBikeStation::sql_projection().expand(&source_aliases);
         let sql = r#"
 with parameters as (select $1::point as current_position, $2::float as search_radius)
 select

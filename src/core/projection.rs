@@ -1,9 +1,6 @@
-use std::{
-    collections::{hash_map::Iter, HashMap},
-    marker::PhantomData,
-};
+use std::collections::{hash_map::Iter, HashMap};
 
-use super::{structure::StructureField, SqlEntity, Structure};
+use super::Structure;
 
 #[derive(Debug, Clone)]
 pub struct SourceAliases {
@@ -29,29 +26,13 @@ impl SourceAliases {
 #[derive(Debug, Clone)]
 pub struct ProjectionFieldDefinition {
     /// SQL definition of the field, usally a field name but can be any SQL operation of function.
-    /// Note that the expression "**" is replaced by the source name when expanded. By example:
-    /// `**.thing_id` will turn into `my_source.thing_id` (if source name is
-    /// `my_source` obviously) when expanded. `sum(**.field)` will turn to `sum(my_source.field)`
     definition: String,
 
     /// Output field name
     name: String,
-
-    /// Source name
-    source: String,
 }
 
 impl ProjectionFieldDefinition {
-    /// Create field definition from a field structure.
-    pub fn from_structure_field(structure_field: &StructureField) -> Self {
-        let (field_name, _field_type) = structure_field.dump();
-
-        Self {
-            definition: format!("{{:source:}}.{}", field_name),
-            name: field_name.to_string(),
-        }
-    }
-
     /// Instanciate field definition.
     pub fn new(definition: &str, name: &str) -> Self {
         Self {
@@ -61,59 +42,61 @@ impl ProjectionFieldDefinition {
     }
 
     /// Create the SQL definition of the projection.
-    pub fn expand(&self, source_aliases: &SourceAliases) -> String {
-        let mut definition = self.definition.clone();
+    pub fn expand(&self) -> String {
+        let definition = self.definition.clone();
 
-        for (source_name, source_alias) in source_aliases.iter() {
-            definition = definition.replace(&format!("{{:{}:}}", source_name), source_alias);
-        }
         format!("{} as {}", definition, self.name)
     }
 }
 
 /// A Projection defines what is output from a query in order to hydrate a
 /// [SQLEntity]
-#[derive(Debug, Clone)]
-pub struct Projection<T>
-where
-    T: SqlEntity,
-{
+#[derive(Debug, Clone, Default)]
+pub struct Projection {
     structure: Structure,
     fields: Vec<ProjectionFieldDefinition>,
 }
 
 impl Projection {
-    pub fn from_structure(structure: Structure, source_name: &str) -> Self {
-        let fields = structure
-            .get_fields()
-            .iter()
-            .map(|f| ProjectionFieldDefinition::from_structure_field(f, source_name))
-            .collect();
+    pub fn new(field_list: Vec<(&str, &str, &str)>) -> Self {
+        let mut projection = Self::default();
 
-        Self { structure, fields }
+        for (name, definition, sql_type) in field_list {
+            projection.set_field(name, definition, sql_type);
+        }
+
+        projection
     }
 
-    pub fn set_field(&mut self, field_definition: &str, field_alias: &str) -> &mut Self {
-        let definition = ProjectionFieldDefinition::new(field_definition, field_alias);
+    pub fn set_field(&mut self, name: &str, definition: &str, sql_type: &str) -> &mut Self {
+        let definition = ProjectionFieldDefinition::new(definition, name);
 
         for field in self.fields.as_mut_slice() {
-            if &field.name == field_alias {
+            if &field.name == name {
                 *field = definition;
 
                 return self;
             }
         }
         self.fields.push(definition);
+        self.structure.set_field(name, sql_type);
 
         self
     }
 
     pub fn expand(&self, source_aliases: &SourceAliases) -> String {
-        self.fields
+        let projection = self
+            .fields
             .iter()
-            .map(|def| def.expand(source_aliases))
+            .map(|def| def.expand())
             .collect::<Vec<String>>()
-            .join(", ")
+            .join(", ");
+
+        source_aliases
+            .iter()
+            .fold(projection, |projection, source_alias| {
+                projection.replace(&format!("{{:{}:}}", source_alias.0), source_alias.1)
+            })
     }
 
     pub fn get_fields(&self) -> &[ProjectionFieldDefinition] {
@@ -130,13 +113,14 @@ mod tests {
     use super::*;
 
     fn get_projection() -> Projection {
-        let mut structure = Structure::default();
-        structure
-            .set_field("test_id", "int")
-            .set_field("something", "text")
-            .set_field("is_what", "bool");
+        let field_list: Vec<(&str, &str, &str)> = [
+            ("test_id", "{:alias:}.test_id", "int"),
+            ("something", "something", "text"),
+            ("is_what", "is_what", "bool"),
+        ]
+        .to_vec();
 
-        Projection::from_structure(structure, "alias")
+        Projection::new(field_list)
     }
 
     #[test]
@@ -145,7 +129,9 @@ mod tests {
         let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
 
         assert_eq!(
-            String::from("test_alias.test_id as test_id, test_alias.something as something, test_alias.is_what as is_what"),
+            String::from(
+                "test_alias.test_id as test_id, something as something, is_what as is_what"
+            ),
             projection.expand(&source_aliases)
         );
     }
@@ -156,11 +142,11 @@ mod tests {
         let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
 
         projection
-            .set_field("age({:alias:}.born_at)", "how_old")
-            .set_field("{:alias:}.is_ok", "is_ok");
+            .set_field("how_old", "age({:alias:}.born_at)", "interval")
+            .set_field("is_ok", "{:alias:}.is_ok", "bool");
 
         assert_eq!(
-            String::from("test_alias.test_id as test_id, test_alias.something as something, test_alias.is_what as is_what, age(test_alias.born_at) as how_old, test_alias.is_ok as is_ok"),
+            String::from("test_alias.test_id as test_id, something as something, is_what as is_what, age(test_alias.born_at) as how_old, test_alias.is_ok as is_ok"),
             projection.expand(&source_aliases)
         );
     }
@@ -169,10 +155,10 @@ mod tests {
     fn redefine_field() {
         let mut projection = get_projection();
         let source_aliases = SourceAliases::new(vec![("alias", "test_alias")]);
-        projection.set_field("initcap({:alias:}.something)", "something");
+        projection.set_field("something", "initcap({:alias:}.something)", "text");
 
         assert_eq!(
-            String::from("test_alias.test_id as test_id, initcap(test_alias.something) as something, test_alias.is_what as is_what"),
+            String::from("test_alias.test_id as test_id, initcap(test_alias.something) as something, is_what as is_what"),
             projection.expand(&source_aliases)
         );
     }

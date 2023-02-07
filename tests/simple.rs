@@ -1,6 +1,5 @@
 use agrum::core::{
-    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
-    WhereCondition,
+    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, WhereCondition,
 };
 use tokio::{self};
 use tokio_postgres::{Client, NoTls, Row};
@@ -25,6 +24,17 @@ impl SqlEntity for WhateverEntity {
             something: row.get("maybe"),
         })
     }
+
+    fn sql_projection() -> Projection {
+        let mut projection = Projection::default();
+        projection
+            .set_field("thing_id", "{:thing:}.thing_id", "int")
+            .set_field("content", "{:thing:}.content", "text")
+            .set_field("has_thing", "{:thing:}.has_thing", "bool")
+            .set_field("maybe", "{:thing:}.maybe", "int");
+
+        projection
+    }
 }
 
 struct WhateverSqlDefinition {
@@ -33,13 +43,7 @@ struct WhateverSqlDefinition {
 
 impl WhateverSqlDefinition {
     pub fn new() -> Self {
-        let mut structure = Structure::default();
-        structure
-            .set_field("thing_id", "int")
-            .set_field("content", "text")
-            .set_field("has_thing", "bool")
-            .set_field("maybe", "int");
-        let projection = Projection::from_structure(structure, "main");
+        let projection = WhateverEntity::sql_projection();
 
         Self { projection }
     }
@@ -49,7 +53,7 @@ impl SqlDefinition for WhateverSqlDefinition {
     fn expand(&self, condition: String) -> String {
         let projection = self
             .projection
-            .expand(&SourceAliases::new(vec![("main", "whatever")]));
+            .expand(&SourceAliases::new(vec![("thing", "whatever")]));
 
         format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe) where {condition}")
     }
