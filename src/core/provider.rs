@@ -9,7 +9,7 @@ use super::{SqlEntity, WhereCondition};
 /// etc.) This has to be the SQL definition as it will be interpreted by
 /// Postgres.
 pub trait SqlDefinition {
-    /// SQL that is sent to Postgres (parameters shall be ?)
+    /// SQL that is sent to Postgres (parameters shall be marked as `$?`)
     fn expand(&self, condition: String) -> String;
 }
 

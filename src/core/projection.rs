@@ -72,7 +72,7 @@ impl Projection {
         let definition = ProjectionFieldDefinition::new(definition, name);
 
         for field in self.fields.as_mut_slice() {
-            if &field.name == name {
+            if field.name == name {
                 *field = definition;
 
                 return self;

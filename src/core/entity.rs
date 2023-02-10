@@ -20,13 +20,12 @@ pub enum HydrationError {
 impl Display for HydrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidData(msg) => write!(f, "Invalid data error: «{}»", msg),
+            Self::InvalidData(msg) => write!(f, "Invalid data error: «{msg}»"),
             Self::FieldFetchFailed { error, field_index } => write!(
                 f,
-                "Fail to fetch data for field index {}, message: «{}».",
-                field_index, error
+                "Fail to fetch data for field index {field_index}, message: «{error}»."
             ),
-            Self::RowFetchFailed(e) => write!(f, "Fail to fetch the row, message «{}».", e),
+            Self::RowFetchFailed(e) => write!(f, "Fail to fetch the row, message «{e}»."),
         }
     }
 }
