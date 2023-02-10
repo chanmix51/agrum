@@ -4,7 +4,10 @@ compile:
 release:
 	cargo build --release
 
-test:
+test: check
+	cargo test
+
+check:
 	cargo fmt
 	cargo clippy
-	cargo test
+
