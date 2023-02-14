@@ -1,6 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData};
 
-use super::{structure::Structured, Structure};
+use super::{structure::Structured, SourcesCatalog, Structure};
 
 //pub type SourceAliases = HashMap<String, String>;
 
@@ -17,6 +17,17 @@ impl SourceAliases {
         }
 
         Self { aliases }
+    }
+
+    /// This method easily create a SourceAlias from a [SourcesCatalog].
+    /// source alias will be the same as their source name.
+    pub fn from_sources_catalog(catalog: &SourcesCatalog) -> Self {
+        let source_alias: Vec<(&str, &str)> = catalog
+            .iter()
+            .map(|(name, _source)| (name.as_str(), name.as_str()))
+            .collect();
+
+        SourceAliases::new(&source_alias)
     }
 
     pub fn get_aliases(&self) -> &HashMap<String, String> {

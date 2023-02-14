@@ -39,16 +39,12 @@ pub async fn database_clean(client: &Client) -> Result<(), Box<dyn Error>> {
 pub struct BikeStationTable;
 
 impl SqlDefinition for BikeStationTable {
-    fn expand(&self, _condition: String) -> String {
+    fn expand(&self, _condition: &str) -> String {
         "bike_station_app.bike_station".to_owned()
     }
 }
 
 impl SqlSource for BikeStationTable {
-    fn get_definition(&self) -> &dyn SqlDefinition {
-        self
-    }
-
     fn get_structure(&self) -> Structure {
         let mut structure = Structure::default();
         structure
@@ -65,16 +61,12 @@ impl SqlSource for BikeStationTable {
 pub struct StationMeasureTable;
 
 impl SqlDefinition for StationMeasureTable {
-    fn expand(&self, _condition: String) -> String {
+    fn expand(&self, _condition: &str) -> String {
         "bike_station_app.station_measure".to_owned()
     }
 }
 
 impl SqlSource for StationMeasureTable {
-    fn get_definition(&self) -> &dyn SqlDefinition {
-        self
-    }
-
     fn get_structure(&self) -> Structure {
         let mut structure = Structure::default();
         structure

@@ -10,7 +10,7 @@ use super::{SqlEntity, WhereCondition};
 /// Postgres.
 pub trait SqlDefinition {
     /// SQL that is sent to Postgres (parameters shall be marked as `$?`)
-    fn expand(&self, condition: String) -> String;
+    fn expand(&self, condition: &str) -> String;
 }
 
 /// A Provider is a structure that holds the connection and the pipeworks to
@@ -50,7 +50,7 @@ where
         condition: WhereCondition<'_>,
     ) -> Result<Vec<T>, Box<dyn Error>> {
         let (expression, parameters) = condition.expand();
-        let sql = self.definition.expand(expression);
+        let sql = self.definition.expand(&expression);
         let mut items: Vec<T> = Vec::new();
 
         println!("SQL = “{sql}”.");

@@ -52,7 +52,7 @@ impl WhateverSqlDefinition {
 }
 
 impl SqlDefinition for WhateverSqlDefinition {
-    fn expand(&self, condition: String) -> String {
+    fn expand(&self, condition: &str) -> String {
         let projection = self.projection.expand(&self.source_aliases);
 
         format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe) where {condition}")
