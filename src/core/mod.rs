@@ -10,4 +10,4 @@ pub use entity::{HydrationError, SqlEntity};
 pub use projection::{Projection, SourceAliases};
 pub use provider::{Provider, SqlDefinition};
 pub use source::SqlSource;
-pub use structure::Structure;
+pub use structure::{Structure, Structured};

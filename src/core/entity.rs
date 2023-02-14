@@ -1,8 +1,8 @@
-use std::{error::Error, fmt::Display};
-
 use tokio_postgres::{error::Error as PgError, Row};
 
-use super::Projection;
+use std::{error::Error, fmt::Display};
+
+use super::Structured;
 
 /// Error raised during entity hydration process.
 #[derive(Debug)]
@@ -34,12 +34,9 @@ impl Error for HydrationError {}
 
 /// Database entity, this trait defined how entities are hydrated from database
 /// data.
-pub trait SqlEntity {
+pub trait SqlEntity: Structured {
     /// Create a new Entity from database data in a result row.
     fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
         Self: Sized;
-
-    /// Return the SQL projection required to build this entity.
-    fn sql_projection() -> Projection;
 }
