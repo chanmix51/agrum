@@ -27,6 +27,17 @@ pub struct Structure {
 }
 
 impl Structure {
+    /// Create a new instance of Structure from a slice of tuples.
+    pub fn new(field_definitions: &[(&str, &str)]) -> Self {
+        let mut fields: Vec<StructureField> = Vec::new();
+
+        for (name, sql_type) in field_definitions {
+            fields.push(StructureField::new(name, sql_type));
+        }
+
+        Self { fields }
+    }
+
     pub fn set_field(&mut self, name: &str, sql_type: &str) -> &mut Self {
         let name = name.to_string();
         let sql_type = sql_type.to_string();
@@ -48,18 +59,17 @@ impl Structure {
     }
 }
 
+pub trait Structured {
+    fn get_structure() -> Structure;
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
 
     fn get_structure() -> Structure {
-        let mut structure = Structure::default();
-        structure
-            .set_field("a_field", "a_type")
-            .set_field("another_field", "another_type");
-
-        structure
+        Structure::new(&[("a_field", "a_type"), ("another_field", "another_type")])
     }
 
     #[test]

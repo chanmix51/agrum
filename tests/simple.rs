@@ -1,8 +1,7 @@
 use agrum::core::{
     HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
-    WhereCondition,
+    Structured, WhereCondition,
 };
-use tokio::{self};
 use tokio_postgres::{Client, NoTls, Row};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,6 +10,17 @@ struct WhateverEntity {
     content: String,
     has_thing: bool,
     something: Option<i32>,
+}
+
+impl Structured for WhateverEntity {
+    fn get_structure() -> Structure {
+        Structure::new(&[
+            ("thing_id", "int"),
+            ("content", "text"),
+            ("has_thing", "bool"),
+            ("maybe", "int"),
+        ])
+    }
 }
 
 impl SqlEntity for WhateverEntity {
@@ -28,28 +38,22 @@ impl SqlEntity for WhateverEntity {
 }
 
 struct WhateverSqlDefinition {
-    projection: Projection,
+    projection: Projection<WhateverEntity>,
+    source_aliases: SourceAliases,
 }
 
 impl WhateverSqlDefinition {
-    pub fn new() -> Self {
-        let mut structure = Structure::default();
-        structure
-            .set_field("thing_id", "int")
-            .set_field("content", "text")
-            .set_field("has_thing", "bool")
-            .set_field("maybe", "int");
-        let projection = Projection::from_structure(structure, "main");
-
-        Self { projection }
+    pub fn new(projection: Projection<WhateverEntity>) -> Self {
+        Self {
+            projection,
+            source_aliases: SourceAliases::new(&[("thing", "whatever")]),
+        }
     }
 }
 
 impl SqlDefinition for WhateverSqlDefinition {
-    fn expand(&self, condition: String) -> String {
-        let projection = self
-            .projection
-            .expand(&SourceAliases::new(vec![("main", "whatever")]));
+    fn expand(&self, condition: &str) -> String {
+        let projection = self.projection.expand(&self.source_aliases);
 
         format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe) where {condition}")
     }
@@ -71,8 +75,12 @@ async fn get_client() -> Client {
 async fn provider_no_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
+    let provider: Provider<WhateverEntity> = Provider::new(
+        &client,
+        Box::new(WhateverSqlDefinition::new(
+            Projection::<WhateverEntity>::default(),
+        )),
+    );
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
@@ -101,8 +109,12 @@ async fn provider_no_filter() {
 async fn provider_with_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> =
-        Provider::new(&client, Box::new(WhateverSqlDefinition::new()));
+    let provider: Provider<WhateverEntity> = Provider::new(
+        &client,
+        Box::new(WhateverSqlDefinition::new(
+            Projection::<WhateverEntity>::default(),
+        )),
+    );
 
     let rows = provider
         .find(WhereCondition::where_in(

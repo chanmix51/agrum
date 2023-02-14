@@ -41,49 +41,51 @@ impl SqlEntity for ShortBikeStation {
     }
 }
 
+impl Structured for ShortBikeStation {
+    fn get_structure() -> Structure {
+        let structure = Structure::new(&[
+            ("bike_station_id", "int"),
+            ("name", "text"),
+            ("coords", "point"),
+            ("distance_m", "int"),
+            ("total_slots", "int"),
+            ("working_slots", "int"),
+            ("available_slots", "int"),
+            ("has_bank", "bool"),
+        ]);
+
+        structure
+    }
+}
+
 struct FindShortBikeStationAroundDefinition {
-    sources: HashMap<String, Box<dyn SqlSource>>,
+    sources: SourcesCatalog,
+    projection: Projection<ShortBikeStation>,
 }
 
 impl FindShortBikeStationAroundDefinition {
     pub fn new() -> Box<Self> {
-        let mut sources: HashMap<String, Box<dyn SqlSource>> = HashMap::new();
-        sources.insert(
-            "bike_station".to_string(),
-            Box::new(BikeStationTable::default()),
-        );
-        sources.insert(
-            "station_measure".to_string(),
-            Box::new(StationMeasureTable::default()),
-        );
+        let mut sources: SourcesCatalog = SourcesCatalog::new(HashMap::new());
+        sources
+            .add_source("bike_station", Box::new(BikeStationTable::default()))
+            .add_source("station_measure", Box::new(StationMeasureTable::default()));
 
-        Box::new(Self { sources })
-    }
-
-    fn get_projection(&self) -> Projection {
-        let structure = self.sources.get("bike_station").unwrap().get_structure();
-        let mut projection = Projection::from_structure(structure, "station");
+        let mut projection = Projection::<ShortBikeStation>::default();
         projection
-            .set_field("initcap({:station:}.name)", "name")
-            .set_field(
-                "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int",
-                "distance_m",
-            )
-            .set_field("{:measure:}.total_slots", "total_slots")
-            .set_field("{:measure:}.working_slots", "working_slots")
-            .set_field("{:measure:}.available_slots", "available_slots");
+            .set_definition("distance_m",  "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int")
+            .set_definition("bike_station_id", "{:station:}.bike_station_id");
 
-        projection
+        Box::new(Self {
+            sources,
+            projection,
+        })
     }
 }
 
 impl SqlDefinition for FindShortBikeStationAroundDefinition {
-    fn expand(&self, condition: String) -> String {
-        let source_aliases = SourceAliases::new(vec![
-            ("station", "bike_station"),
-            ("measure", "last_measure"),
-        ]);
-        let projection = self.get_projection().expand(&source_aliases);
+    fn expand(&self, condition: &str) -> String {
+        let source_aliases =
+            SourceAliases::new(&[("station", "bike_station"), ("measure", "last_measure")]);
         let sql = r#"
 with parameters as (select $1::point as current_position, $2::float as search_radius)
 select
@@ -100,26 +102,10 @@ from {station} as bike_station
 where {condition}
 order by distance_m asc"#;
 
-        sql.replace("{projection}", &projection)
+        sql.replace("{projection}", &self.projection.expand(&source_aliases))
             .replace("{condition}", &condition)
-            .replace(
-                "{station}",
-                &self
-                    .sources
-                    .get("bike_station")
-                    .unwrap()
-                    .get_definition()
-                    .expand(String::new()),
-            )
-            .replace(
-                "{measure}",
-                &self
-                    .sources
-                    .get("station_measure")
-                    .unwrap()
-                    .get_definition()
-                    .expand(String::new()),
-            )
+            .replace("{station}", &self.sources.expand("bike_station", ""))
+            .replace("{measure}", &self.sources.expand("station_measure", ""))
     }
 }
 

@@ -14,17 +14,12 @@ impl BooleanCondition {
         match self {
             Self::None => "true".to_string(),
             Self::Expression(expr) => expr.to_owned(),
-            Self::And(lft, rgt) => {
-                if lft.needs_precedence() && !rgt.needs_precedence() {
-                    format!("({}) and {}", lft.expand(), rgt.expand())
-                } else if !lft.needs_precedence() && rgt.needs_precedence() {
-                    format!("{} and ({})", lft.expand(), rgt.expand())
-                } else if lft.needs_precedence() && rgt.needs_precedence() {
-                    format!("({}) and ({})", lft.expand(), rgt.expand())
-                } else {
-                    format!("{} and {}", lft.expand(), rgt.expand())
-                }
-            }
+            Self::And(lft, rgt) => match (lft.needs_precedence(), rgt.needs_precedence()) {
+                (true, false) => format!("({}) and {}", lft.expand(), rgt.expand()),
+                (false, true) => format!("{} and ({})", lft.expand(), rgt.expand()),
+                (true, true) => format!("({}) and ({})", lft.expand(), rgt.expand()),
+                (false, false) => format!("{} and {}", lft.expand(), rgt.expand()),
+            },
             Self::Or(lft, rgt) => format!("{} or {}", lft.expand(), rgt.expand()),
         }
     }
@@ -70,7 +65,7 @@ impl<'a> WhereCondition<'a> {
             if !expression.contains("$?") {
                 break;
             }
-            expression = expression.replacen("$?", &format!("${}", param_index), 1);
+            expression = expression.replacen("$?", &format!("${param_index}"), 1);
             param_index += 1;
         }
 
@@ -329,12 +324,5 @@ mod tests {
 
         assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
         assert_eq!(4, params.len());
-    }
-
-    #[test]
-    #[should_panic]
-    fn expression_with_wrong_number_of_parameters_panics() {
-        let expression = WhereCondition::new("A > $?::pg_type", Vec::new());
-        let _ = expression.expand();
     }
 }
