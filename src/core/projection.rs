@@ -103,7 +103,7 @@ where
     T: Structured,
 {
     /// Replace a field definition. It panics if the field is not declared.
-    pub fn set_definition(&mut self, name: &str, definition: &str) -> &mut Self {
+    pub fn set_definition(mut self, name: &str, definition: &str) -> Self {
         let definition = ProjectionFieldDefinition::new(definition, name);
 
         for field in self.fields.as_mut_slice() {
@@ -165,8 +165,8 @@ mod tests {
     }
 
     fn get_projection() -> Projection<TestStructured> {
-        let mut projection = Projection::<TestStructured>::default();
-        projection.set_definition("test_id", "{:alias:}.test_id");
+        let projection =
+            Projection::<TestStructured>::default().set_definition("test_id", "{:alias:}.test_id");
 
         projection
     }
@@ -187,18 +187,16 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_unexistent_field() {
-        let mut projection = get_projection();
-
-        projection
+        let projection = get_projection()
             .set_definition("how_old", "age({:alias:}.born_at)")
             .set_definition("test_id", "{:alias:}.is_ok");
     }
 
     #[test]
     fn redefine_field() {
-        let mut projection = get_projection();
+        let projection =
+            get_projection().set_definition("something", "initcap({:alias:}.something)");
         let source_aliases = SourceAliases::new(&[("alias", "test_alias")]);
-        projection.set_definition("something", "initcap({:alias:}.something)");
 
         assert_eq!(
             String::from("test_alias.test_id as test_id, initcap(test_alias.something) as something, is_what as is_what"),
