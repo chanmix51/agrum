@@ -53,8 +53,6 @@ where
         let sql = self.definition.expand(&expression);
         let mut items: Vec<T> = Vec::new();
 
-        println!("SQL = “{sql}”.");
-
         for row in self.pg_client.query(&sql, parameters.as_slice()).await? {
             items.push(T::hydrate(row)?);
         }
