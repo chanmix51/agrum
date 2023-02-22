@@ -2,6 +2,20 @@ use std::iter::repeat;
 
 use tokio_postgres::types::ToSql;
 
+#[macro_export]
+macro_rules! params {
+    ($( $x:expr ),*) => {
+        {
+            use tokio_postgres::types::ToSql;
+            let mut params = Vec::new();
+            $(
+                params.push(&$x as &(dyn ToSql + Sync));
+            )*
+            params
+        }
+    };
+}
+
 enum BooleanCondition {
     None,
     Expression(String),
@@ -82,10 +96,11 @@ impl<'a> WhereCondition<'a> {
         }
     }
 
-    pub fn and_where(&mut self, mut condition: WhereCondition<'a>) -> &mut Self {
+    pub fn and_where(mut self, mut condition: WhereCondition<'a>) -> Self {
         if condition.condition.is_none() {
             return self;
         }
+
         if self.condition.is_none() {
             self.condition = condition.condition;
             self.parameters = condition.parameters;
@@ -100,7 +115,7 @@ impl<'a> WhereCondition<'a> {
         self
     }
 
-    pub fn or_where(&mut self, mut condition: WhereCondition<'a>) -> &mut Self {
+    pub fn or_where(mut self, mut condition: WhereCondition<'a>) -> Self {
         if condition.condition.is_none() {
             return self;
         }
@@ -175,8 +190,8 @@ mod tests {
 
     #[test]
     fn expression_and() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.and_where(WhereCondition::new("B", Vec::new()));
+        let expression = WhereCondition::new("A", Vec::new())
+            .and_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A and B", &sql);
@@ -185,8 +200,8 @@ mod tests {
 
     #[test]
     fn expression_and_none() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.and_where(WhereCondition::default());
+        let expression = WhereCondition::new("A", Vec::new())
+            .and_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -195,8 +210,8 @@ mod tests {
 
     #[test]
     fn expression_none_and() {
-        let mut expression = WhereCondition::default();
-        expression.and_where(WhereCondition::new("A", Vec::new()));
+        let expression = WhereCondition::default()
+            .and_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -205,8 +220,8 @@ mod tests {
 
     #[test]
     fn expression_or() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.or_where(WhereCondition::new("B", Vec::new()));
+        let expression = WhereCondition::new("A", Vec::new())
+            .or_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A or B", &sql);
@@ -215,8 +230,8 @@ mod tests {
 
     #[test]
     fn expression_or_none() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.or_where(WhereCondition::default());
+        let expression = WhereCondition::new("A", Vec::new())
+            .or_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -225,8 +240,8 @@ mod tests {
 
     #[test]
     fn expression_none_or() {
-        let mut expression = WhereCondition::default();
-        expression.or_where(WhereCondition::new("A", Vec::new()));
+        let expression = WhereCondition::default()
+            .or_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -235,8 +250,7 @@ mod tests {
 
     #[test]
     fn expression_complex_no_precedence() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression
+        let expression = WhereCondition::new("A", Vec::new())
             .and_where(WhereCondition::new("B", Vec::new()))
             .or_where(WhereCondition::new("C", Vec::new()));
         let (sql, params) = expression.expand();
@@ -247,10 +261,10 @@ mod tests {
 
     #[test]
     fn expression_complex_with_precedence() {
-        let mut sub_expression = WhereCondition::new("A", Vec::new());
-        sub_expression.or_where(WhereCondition::new("B", Vec::new()));
-        let mut expression = WhereCondition::new("C", Vec::new());
-        expression.and_where(sub_expression);
+        let sub_expression = WhereCondition::new("A", Vec::new())
+            .or_where(WhereCondition::new("B", Vec::new()));
+        let expression = WhereCondition::new("C", Vec::new())
+            .and_where(sub_expression);
         let (sql, params) = expression.expand();
 
         assert_eq!("C and (A or B)", &sql);
@@ -259,10 +273,10 @@ mod tests {
 
     #[test]
     fn expression_complex_with_self_precedence() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.or_where(WhereCondition::new("B", Vec::new()));
         let sub_expression = WhereCondition::new("C", Vec::new());
-        expression.and_where(sub_expression);
+        let expression = WhereCondition::new("A", Vec::new())
+            .or_where(WhereCondition::new("B", Vec::new()))
+            .and_where(sub_expression);
         let (sql, params) = expression.expand();
 
         assert_eq!("(A or B) and C", &sql);
@@ -271,11 +285,11 @@ mod tests {
 
     #[test]
     fn expression_complex_with_both_precedence() {
-        let mut expression = WhereCondition::new("A", Vec::new());
-        expression.or_where(WhereCondition::new("B", Vec::new()));
-        let mut sub_expression = WhereCondition::new("C", Vec::new());
-        sub_expression.or_where(WhereCondition::new("D", Vec::new()));
-        expression.and_where(sub_expression);
+        let sub_expression = WhereCondition::new("C", Vec::new())
+            .or_where(WhereCondition::new("D", Vec::new()));
+        let expression = WhereCondition::new("A", Vec::new())
+            .or_where(WhereCondition::new("B", Vec::new()))
+            .and_where(sub_expression);
         let (sql, params) = expression.expand();
 
         assert_eq!("(A or B) and (C or D)", &sql);
@@ -284,7 +298,7 @@ mod tests {
 
     #[test]
     fn expression_sql_with_parameter() {
-        let expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
+        let expression = WhereCondition::new("A > $?::pg_type", params![0_i32]);
         let (sql, params) = expression.expand();
 
         assert_eq!("A > $1::pg_type", &sql);
@@ -293,8 +307,8 @@ mod tests {
 
     #[test]
     fn expression_sql_with_multiple_parameters() {
-        let mut expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
-        expression.and_where(WhereCondition::new("B = $?", vec![&(1_i32)]));
+        let expression = WhereCondition::new("A > $?::pg_type", params![0_i32])
+            .and_where(WhereCondition::new("B = $?", params![1_i32]));
         let (sql, params) = expression.expand();
 
         assert_eq!("A > $1::pg_type and B = $2", &sql);
@@ -303,7 +317,7 @@ mod tests {
 
     #[test]
     fn expression_where_in() {
-        let expression = WhereCondition::where_in("A", vec![&(0_i32), &(1_i32)]);
+        let expression = WhereCondition::where_in("A", params![0_i32, 1_i32]);
         let (sql, params) = expression.expand();
 
         assert_eq!("A in ($1, $2)".to_string(), sql);
@@ -312,17 +326,25 @@ mod tests {
 
     #[test]
     fn expression_sql_with_multiple_parameters_and_where_in() {
-        let mut expression = WhereCondition::new("A > $?::pg_type", vec![&(0_i32)]);
-        expression
+        let expression = WhereCondition::new("A > $?::pg_type", params![0_i32])
             .or_where(WhereCondition::new("B", Vec::new()))
             .and_where(WhereCondition::where_in(
                 "C",
-                vec![&100_i32, &101_i32, &102_i32],
+                params![100_i32, 101_i32, 102_i32],
             ));
 
         let (sql, params) = expression.expand();
 
         assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
         assert_eq!(4, params.len());
+    }
+
+    #[test]
+    fn parameters_tosql() {
+        let expression = WhereCondition::new("a = $?", params!["whatever"]);
+        let (sql, params) = expression.expand();
+
+        assert_eq!("a = $1", &sql);
+        assert_eq!(1, params.len());
     }
 }
