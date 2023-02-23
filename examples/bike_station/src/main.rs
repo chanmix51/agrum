@@ -70,7 +70,7 @@ impl FindShortBikeStationAroundDefinition {
             .add_source("bike_station", Box::new(BikeStationTable::default()))
             .add_source("station_measure", Box::new(StationMeasureTable::default()));
 
-        let mut projection = Projection::<ShortBikeStation>::default();
+        let projection = Projection::<ShortBikeStation>::default();
         projection
             .set_definition("distance_m",  "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int")
             .set_definition("bike_station_id", "{:station:}.bike_station_id");

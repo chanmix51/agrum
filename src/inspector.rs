@@ -1,8 +1,8 @@
-use std::{error::Error};
+use std::error::Error;
 
 use tokio_postgres::{Client, Row};
 
-use crate::core::{SqlEntity, Structured, Structure, SqlDefinition, Provider, WhereCondition};
+use crate::core::{Provider, SqlDefinition, SqlEntity, Structure, Structured, WhereCondition};
 
 use super::*;
 
@@ -16,8 +16,9 @@ pub struct DatabaseInfo {
 
 impl SqlEntity for DatabaseInfo {
     fn hydrate(row: Row) -> Result<Self, core::HydrationError>
-        where
-            Self: Sized {
+    where
+        Self: Sized,
+    {
         let entity = Self {
             name: row.get("name"),
             owner: row.get("owner"),
@@ -42,13 +43,13 @@ impl Structured for DatabaseInfo {
     }
 }
 
-
 #[derive(Default)]
 struct DatabaseInfoDefinition;
 
 impl SqlDefinition for DatabaseInfoDefinition {
     fn expand(&self, condition: &str) -> String {
-        format!(r#"
+        format!(
+            r#"
 select
   db.datname as name,
   pg_catalog.pg_get_userbyid(db.datdba) as owner,
@@ -61,9 +62,10 @@ select
   pg_catalog.shobj_description(db.oid, 'pg_database') as description
 from pg_catalog.pg_database as db
 where {condition}
-order by 1;"#)
+order by 1;"#
+        )
     }
- }
+}
 
 #[derive(Debug)]
 pub struct SchemaInfo {
@@ -75,8 +77,9 @@ pub struct SchemaInfo {
 
 impl SqlEntity for SchemaInfo {
     fn hydrate(row: Row) -> Result<Self, core::HydrationError>
-        where
-            Self: Sized {
+    where
+        Self: Sized,
+    {
         let schema_info = Self {
             name: row.get("name"),
             relations: row.get("relations"),
@@ -94,7 +97,7 @@ impl Structured for SchemaInfo {
             ("name", "text"),
             ("relations", "int"),
             ("owner", "text"),
-            ("description", "text")
+            ("description", "text"),
         ])
     }
 }
@@ -104,7 +107,8 @@ struct SchemaInfoDefinition;
 
 impl SqlDefinition for SchemaInfoDefinition {
     fn expand(&self, condition: &str) -> String {
-        format!(r#"
+        format!(
+            r#"
 select
   n.nspname     as "name",
   count(c)      as "relations",
@@ -119,7 +123,8 @@ from pg_catalog.pg_namespace n
     on n.nspowner = o.oid
 where {condition}
 group by 1, 3, 4
-order by 1 asc;"#)
+order by 1 asc;"#
+        )
     }
 }
 
@@ -133,10 +138,7 @@ impl<'client> Inspector<'client> {
     }
 
     fn get_dbinfo_provider(&self) -> Provider<DatabaseInfo> {
-        Provider::new(
-            &self.client,
-            Box::new(DatabaseInfoDefinition::default())
-            )
+        Provider::new(&self.client, Box::new(DatabaseInfoDefinition::default()))
     }
 
     pub async fn get_database_list(&self) -> Result<Vec<DatabaseInfo>, Box<dyn Error>> {
@@ -147,31 +149,28 @@ impl<'client> Inspector<'client> {
 
     pub async fn get_db_info(&self, name: &str) -> Result<Option<DatabaseInfo>, Box<dyn Error>> {
         let condition = WhereCondition::new("datname = $?", params![name]);
-        let rows = self.get_dbinfo_provider()
-            .find(condition)
-            .await?;
+        let rows = self.get_dbinfo_provider().find(condition).await?;
 
         Ok(rows.into_iter().next())
     }
 
     pub async fn get_schema_list(&self) -> Result<Vec<SchemaInfo>, Box<dyn Error>> {
-        let condition = WhereCondition::new("n.nspname !~ $?", params!["^pg_"])
-            .and_where(WhereCondition::new("n.nspname != $?", params!["information_schema"]));
+        let condition = WhereCondition::new("n.nspname !~ $?", params!["^pg_"]).and_where(
+            WhereCondition::new("n.nspname != $?", params!["information_schema"]),
+        );
 
         self.get_all_schemas(condition).await
     }
 
-    pub async fn get_all_schemas(&self, condition: WhereCondition<'_>) -> Result<Vec<SchemaInfo>, Box<dyn Error>> {
-        self.get_schema_provider()
-            .find(condition)
-            .await
+    pub async fn get_all_schemas(
+        &self,
+        condition: WhereCondition<'_>,
+    ) -> Result<Vec<SchemaInfo>, Box<dyn Error>> {
+        self.get_schema_provider().find(condition).await
     }
 
     fn get_schema_provider(&self) -> Provider<SchemaInfo> {
-        Provider::new(
-            &self.client,
-            Box::new(SchemaInfoDefinition::default())
-            )
+        Provider::new(&self.client, Box::new(SchemaInfoDefinition::default()))
     }
 }
 
@@ -197,9 +196,6 @@ from pg_catalog.pg_database as db
 where CONDITION
 order by 1;"#;
 
-        assert_eq!(
-            query,
-            definition.expand("CONDITION")
-            );
+        assert_eq!(query, definition.expand("CONDITION"));
     }
 }
