@@ -8,12 +8,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clap",
- "dsn",
  "futures",
  "futures-util",
  "tokio",
  "tokio-postgres",
- "tokio-stream",
 ]
 
 [[package]]
@@ -191,15 +189,6 @@ dependencies = [
  "block-buffer",
  "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "dsn"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf3f8475da4ee4417904f32f0d0870baebc04857699112a0f6a8282c4945cd6a"
-dependencies = [
- "percent-encoding",
 ]
 
 [[package]]
@@ -870,17 +859,6 @@ dependencies = [
  "socket2",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fb52b74f05dbf495a8fba459fdc331812b96aa086d9eb78101fa0d4569c3313"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]

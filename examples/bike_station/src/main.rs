@@ -43,7 +43,7 @@ impl SqlEntity for ShortBikeStation {
 
 impl Structured for ShortBikeStation {
     fn get_structure() -> Structure {
-        let structure = Structure::new(&[
+        Structure::new(&[
             ("bike_station_id", "int"),
             ("name", "text"),
             ("coords", "point"),
@@ -52,9 +52,7 @@ impl Structured for ShortBikeStation {
             ("working_slots", "int"),
             ("available_slots", "int"),
             ("has_bank", "bool"),
-        ]);
-
-        structure
+        ])
     }
 }
 
@@ -64,21 +62,20 @@ struct FindShortBikeStationAroundDefinition {
 }
 
 impl FindShortBikeStationAroundDefinition {
-    pub fn new() -> Box<Self> {
+    pub fn new() -> Self {
         let mut sources: SourcesCatalog = SourcesCatalog::new(HashMap::new());
         sources
             .add_source("bike_station", Box::new(BikeStationTable::default()))
             .add_source("station_measure", Box::new(StationMeasureTable::default()));
 
-        let projection = Projection::<ShortBikeStation>::default();
-        projection
+        let projection = Projection::<ShortBikeStation>::default()
             .set_definition("distance_m",  "floor(sin(radians({:station:}.coords <-> parameters.current_position)) * 6431000)::int")
             .set_definition("bike_station_id", "{:station:}.bike_station_id");
 
-        Box::new(Self {
+        Self {
             sources,
             projection,
-        })
+        }
     }
 }
 
@@ -109,14 +106,23 @@ order by distance_m asc"#;
     }
 }
 
-struct ShortBikeStationsAroundFinder<'client>(Provider<'client, ShortBikeStation>);
+struct ShortBikeStationsAroundFinder<'client> {
+    client: &'client Client,
+    definition: FindShortBikeStationAroundDefinition,
+}
+
+impl<'client> Provider<ShortBikeStation> for ShortBikeStationsAroundFinder<'client> {
+    fn get_definition(&self) -> &dyn SqlDefinition {
+        &self.definition
+    }
+}
 
 impl<'client> ShortBikeStationsAroundFinder<'client> {
     pub fn new(client: &'client Client) -> Self {
-        Self(Provider::new(
-            &client,
-            FindShortBikeStationAroundDefinition::new(),
-        ))
+        Self {
+            client,
+            definition: FindShortBikeStationAroundDefinition::new(),
+        }
     }
 
     pub async fn find_short_stations_around(
@@ -129,7 +135,7 @@ impl<'client> ShortBikeStationsAroundFinder<'client> {
             vec![position, &search_radius],
         );
 
-        self.0.find(condition).await.unwrap()
+        self.fetch(self.client, condition).await.unwrap()
     }
 }
 

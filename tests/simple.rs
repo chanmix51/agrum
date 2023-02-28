@@ -1,11 +1,16 @@
-use agrum::core::{
-    HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
-    Structured, WhereCondition,
+use std::error::Error;
+
+use agrum::{
+    core::{
+        HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
+        Structured, WhereCondition,
+    },
+    params,
 };
 use tokio_postgres::{Client, NoTls, Row};
 
 #[derive(Debug, Clone, PartialEq)]
-struct WhateverEntity {
+pub struct WhateverEntity {
     entity_id: i32,
     content: String,
     has_thing: bool,
@@ -59,6 +64,40 @@ impl SqlDefinition for WhateverSqlDefinition {
     }
 }
 
+pub struct EntityProvider<'client> {
+    client: &'client Client,
+    definition: WhateverSqlDefinition,
+}
+
+impl<'client> Provider<WhateverEntity> for EntityProvider<'client> {
+    fn get_definition(&self) -> &dyn SqlDefinition {
+        &self.definition
+    }
+}
+
+impl<'client> EntityProvider<'client> {
+    pub fn new(client: &'client Client, projection: Projection<WhateverEntity>) -> Self {
+        Self {
+            client,
+            definition: WhateverSqlDefinition::new(projection),
+        }
+    }
+
+    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error>> {
+        self.fetch(self.client, WhereCondition::default()).await
+    }
+
+    pub async fn fetch_by_id(
+        &self,
+        thing_id: i32,
+    ) -> Result<Option<WhateverEntity>, Box<dyn Error>> {
+        let condition = WhereCondition::new("thing_id = $?", params![thing_id]);
+        let entity = self.fetch(self.client, condition).await?.pop();
+
+        Ok(entity)
+    }
+}
+
 async fn get_client() -> Client {
     let config = std::fs::read_to_string("tests/config.txt").unwrap();
     let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
@@ -75,16 +114,11 @@ async fn get_client() -> Client {
 async fn provider_no_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> = Provider::new(
-        &client,
-        Box::new(WhateverSqlDefinition::new(
-            Projection::<WhateverEntity>::default(),
-        )),
-    );
+    let provider = EntityProvider::new(&client, Projection::<WhateverEntity>::default());
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
-    let rows = provider.find(WhereCondition::default()).await.unwrap();
+    let entities = provider.fetch_all().await.unwrap();
 
     assert_eq!(
         vec![
@@ -101,7 +135,7 @@ async fn provider_no_filter() {
                 something: Some(1),
             },
         ],
-        rows
+        entities
     );
 }
 
@@ -109,28 +143,21 @@ async fn provider_no_filter() {
 async fn provider_with_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider: Provider<WhateverEntity> = Provider::new(
-        &client,
-        Box::new(WhateverSqlDefinition::new(
-            Projection::<WhateverEntity>::default(),
-        )),
-    );
+    let provider = EntityProvider::new(&client, Projection::<WhateverEntity>::default());
 
-    let rows = provider
-        .find(WhereCondition::where_in(
-            "thing_id",
-            vec![&1_i32, &12_i32, &15_i32],
-        ))
+    let entity = provider
+        .fetch_by_id(1)
         .await
-        .unwrap();
+        .unwrap()
+        .expect("there should be a thing with ID=1");
 
     assert_eq!(
-        vec![WhateverEntity {
+        WhateverEntity {
             entity_id: 1,
             content: "whatever".to_string(),
             has_thing: true,
             something: None,
-        },],
-        rows
+        },
+        entity
     );
 }
