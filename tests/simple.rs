@@ -64,18 +64,18 @@ impl SqlDefinition for WhateverSqlDefinition {
     }
 }
 
-pub struct EntityProvider<'client> {
+pub struct WhateverEntityProvider<'client> {
     client: &'client Client,
     definition: WhateverSqlDefinition,
 }
 
-impl<'client> Provider<WhateverEntity> for EntityProvider<'client> {
+impl<'client> Provider<WhateverEntity> for WhateverEntityProvider<'client> {
     fn get_definition(&self) -> &dyn SqlDefinition {
         &self.definition
     }
 }
 
-impl<'client> EntityProvider<'client> {
+impl<'client> WhateverEntityProvider<'client> {
     pub fn new(client: &'client Client, projection: Projection<WhateverEntity>) -> Self {
         Self {
             client,
@@ -114,7 +114,7 @@ async fn get_client() -> Client {
 async fn provider_no_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider = EntityProvider::new(&client, Projection::<WhateverEntity>::default());
+    let provider = WhateverEntityProvider::new(&client, Projection::<WhateverEntity>::default());
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
@@ -143,7 +143,7 @@ async fn provider_no_filter() {
 async fn provider_with_filter() {
     // Connect to the database.
     let client = get_client().await;
-    let provider = EntityProvider::new(&client, Projection::<WhateverEntity>::default());
+    let provider = WhateverEntityProvider::new(&client, Projection::<WhateverEntity>::default());
 
     let entity = provider
         .fetch_by_id(1)

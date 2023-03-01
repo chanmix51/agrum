@@ -1,5 +1,4 @@
 mod condition;
-mod config;
 mod entity;
 mod projection;
 mod provider;
