@@ -190,8 +190,8 @@ mod tests {
 
     #[test]
     fn expression_and() {
-        let expression = WhereCondition::new("A", Vec::new())
-            .and_where(WhereCondition::new("B", Vec::new()));
+        let expression =
+            WhereCondition::new("A", Vec::new()).and_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A and B", &sql);
@@ -200,8 +200,7 @@ mod tests {
 
     #[test]
     fn expression_and_none() {
-        let expression = WhereCondition::new("A", Vec::new())
-            .and_where(WhereCondition::default());
+        let expression = WhereCondition::new("A", Vec::new()).and_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -210,8 +209,7 @@ mod tests {
 
     #[test]
     fn expression_none_and() {
-        let expression = WhereCondition::default()
-            .and_where(WhereCondition::new("A", Vec::new()));
+        let expression = WhereCondition::default().and_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -220,8 +218,8 @@ mod tests {
 
     #[test]
     fn expression_or() {
-        let expression = WhereCondition::new("A", Vec::new())
-            .or_where(WhereCondition::new("B", Vec::new()));
+        let expression =
+            WhereCondition::new("A", Vec::new()).or_where(WhereCondition::new("B", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A or B", &sql);
@@ -230,8 +228,7 @@ mod tests {
 
     #[test]
     fn expression_or_none() {
-        let expression = WhereCondition::new("A", Vec::new())
-            .or_where(WhereCondition::default());
+        let expression = WhereCondition::new("A", Vec::new()).or_where(WhereCondition::default());
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -240,8 +237,7 @@ mod tests {
 
     #[test]
     fn expression_none_or() {
-        let expression = WhereCondition::default()
-            .or_where(WhereCondition::new("A", Vec::new()));
+        let expression = WhereCondition::default().or_where(WhereCondition::new("A", Vec::new()));
         let (sql, params) = expression.expand();
 
         assert_eq!("A", &sql);
@@ -261,10 +257,9 @@ mod tests {
 
     #[test]
     fn expression_complex_with_precedence() {
-        let sub_expression = WhereCondition::new("A", Vec::new())
-            .or_where(WhereCondition::new("B", Vec::new()));
-        let expression = WhereCondition::new("C", Vec::new())
-            .and_where(sub_expression);
+        let sub_expression =
+            WhereCondition::new("A", Vec::new()).or_where(WhereCondition::new("B", Vec::new()));
+        let expression = WhereCondition::new("C", Vec::new()).and_where(sub_expression);
         let (sql, params) = expression.expand();
 
         assert_eq!("C and (A or B)", &sql);
@@ -285,8 +280,8 @@ mod tests {
 
     #[test]
     fn expression_complex_with_both_precedence() {
-        let sub_expression = WhereCondition::new("C", Vec::new())
-            .or_where(WhereCondition::new("D", Vec::new()));
+        let sub_expression =
+            WhereCondition::new("C", Vec::new()).or_where(WhereCondition::new("D", Vec::new()));
         let expression = WhereCondition::new("A", Vec::new())
             .or_where(WhereCondition::new("B", Vec::new()))
             .and_where(sub_expression);

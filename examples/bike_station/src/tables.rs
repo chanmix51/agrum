@@ -46,14 +46,12 @@ impl SqlDefinition for BikeStationTable {
 
 impl SqlSource for BikeStationTable {
     fn get_structure(&self) -> Structure {
-        let mut structure = Structure::default();
-        structure
-            .set_field("bike_station_id", "int")
-            .set_field("name", "text")
-            .set_field("coords", "point")
-            .set_field("has_bank", "bool");
-
-        structure
+        Structure::new(&[
+            ("bike_station_id", "int"),
+            ("name", "text"),
+            ("coords", "point"),
+            ("has_bank", "bool"),
+        ])
     }
 }
 
@@ -68,15 +66,14 @@ impl SqlDefinition for StationMeasureTable {
 
 impl SqlSource for StationMeasureTable {
     fn get_structure(&self) -> Structure {
-        let mut structure = Structure::default();
-        structure
-            .set_field("station_measure_id", "public.uuid")
-            .set_field("bike_station_id", "int")
-            .set_field("probed_at", "timestamptz")
-            .set_field("total_slots", "int2")
-            .set_field("working_slots", "int2")
-            .set_field("available_slots", "int2");
-
-        structure
+        Structure::new(&[
+            ("station_measure_id", "public.uuid"),
+            ("station_measure_id", "public.uuid"),
+            ("bike_station_id", "int"),
+            ("probed_at", "timestamptz"),
+            ("total_slots", "int2"),
+            ("working_slots", "int2"),
+            ("available_slots", "int2"),
+        ])
     }
 }
