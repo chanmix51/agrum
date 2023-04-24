@@ -72,19 +72,20 @@ where {condition}"#
 struct WhateverEntityRepository<'client> {
     provider: Provider<'client, WhateverEntity>,
 }
+
 impl<'client> WhateverEntityRepository<'client> {
     pub fn new(provider: Provider<'client, WhateverEntity>) -> Self {
         Self { provider }
     }
 
-    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error>> {
+    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error + Sync + Send>> {
         self.provider.fetch(WhereCondition::default()).await
     }
 
     pub async fn fetch_by_id(
         &self,
         thing_id: i32,
-    ) -> Result<Option<WhateverEntity>, Box<dyn Error>> {
+    ) -> Result<Option<WhateverEntity>, Box<dyn Error + Sync + Send>> {
         let condition = WhereCondition::new("thing_id = $?", params![thing_id]);
         let entity = self.provider.fetch(condition).await?.pop();
 

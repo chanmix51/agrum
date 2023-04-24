@@ -1,6 +1,8 @@
-use std::{error::Error, marker::PhantomData};
+use std::marker::PhantomData;
 
 use tokio_postgres::Client;
+
+use crate::StdResult;
 
 use super::{SqlEntity, WhereCondition};
 
@@ -27,6 +29,13 @@ impl ProviderBuilder {
     /// Return a borrow of the internal Postgres client.
     pub fn get_client(&self) -> &Client {
         &self.client
+    }
+
+    /// Execute a query without returned values
+    pub async fn execute(&self, query: &str) -> StdResult<()> {
+        let _ = self.client.execute(query, &[]).await?;
+
+        Ok(())
     }
 
     /// Create a new Provider
@@ -67,7 +76,7 @@ where
     }
 
     /// Launch a SQL statement to fetch the associated entities.
-    pub async fn fetch(&self, condition: WhereCondition<'_>) -> Result<Vec<T>, Box<dyn Error>> {
+    pub async fn fetch(&self, condition: WhereCondition<'_>) -> StdResult<Vec<T>> {
         let (expression, parameters) = condition.expand();
         let sql = self.definition.expand(&expression);
         let mut items: Vec<T> = Vec::new();

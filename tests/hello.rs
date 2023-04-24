@@ -25,7 +25,7 @@ impl SqlEntity for DbMessage {
     }
 }
 
-/// SQL query that creates DbMessage instances (could be generic though)
+/// SQL query
 #[derive(Debug, Default)]
 struct HelloWorldDbMessageDefinition;
 
