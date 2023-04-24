@@ -1,9 +1,10 @@
 use std::{collections::HashMap, marker::PhantomData};
 
-use super::{structure::Structured, SourcesCatalog, Structure};
+use super::{SourcesCatalog, SqlEntity, Structure};
 
 //pub type SourceAliases = HashMap<String, String>;
 
+#[derive(Debug, Default)]
 pub struct SourceAliases {
     aliases: HashMap<String, String>,
 }
@@ -67,7 +68,7 @@ impl ProjectionFieldDefinition {
 #[derive(Debug, Clone)]
 pub struct Projection<T>
 where
-    T: Structured,
+    T: SqlEntity,
 {
     structure: Structure,
     fields: Vec<ProjectionFieldDefinition>,
@@ -76,7 +77,7 @@ where
 
 impl<T> Default for Projection<T>
 where
-    T: Structured,
+    T: SqlEntity,
 {
     fn default() -> Self {
         let mut fields: Vec<ProjectionFieldDefinition> = Vec::new();
@@ -100,7 +101,7 @@ where
 
 impl<T> Projection<T>
 where
-    T: Structured,
+    T: SqlEntity,
 {
     /// Replace a field definition. It panics if the field is not declared.
     pub fn set_definition(mut self, name: &str, definition: &str) -> Self {
@@ -150,11 +151,18 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::core::Structured;
+
     use super::*;
 
-    struct TestStructured;
+    #[allow(dead_code)]
+    struct TestSqlEntity {
+        test_id: i64,
+        something: String,
+        is_what: bool,
+    }
 
-    impl Structured for TestStructured {
+    impl Structured for TestSqlEntity {
         fn get_structure() -> Structure {
             Structure::new(&[
                 ("test_id", "int"),
@@ -164,9 +172,24 @@ mod tests {
         }
     }
 
-    fn get_projection() -> Projection<TestStructured> {
+    impl SqlEntity for TestSqlEntity {
+        fn hydrate(row: tokio_postgres::Row) -> Result<Self, crate::core::HydrationError>
+        where
+            Self: Sized,
+        {
+            let entity = Self {
+                test_id: row.get("test_id"),
+                something: row.get("something"),
+                is_what: row.get("is_what"),
+            };
+
+            Ok(entity)
+        }
+    }
+
+    fn get_projection() -> Projection<TestSqlEntity> {
         let projection =
-            Projection::<TestStructured>::default().set_definition("test_id", "{:alias:}.test_id");
+            Projection::<TestSqlEntity>::default().set_definition("test_id", "{:alias:}.test_id");
 
         projection
     }
@@ -187,7 +210,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_unexistent_field() {
-        let projection = get_projection()
+        let _projection = get_projection()
             .set_definition("how_old", "age({:alias:}.born_at)")
             .set_definition("test_id", "{:alias:}.is_ok");
     }

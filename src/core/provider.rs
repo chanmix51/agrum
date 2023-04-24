@@ -1,7 +1,6 @@
-use std::error::Error;
+use std::{error::Error, marker::PhantomData};
 
-use async_trait::async_trait;
-use tokio_postgres::Client as PgClient;
+use tokio_postgres::Client;
 
 use super::{SqlEntity, WhereCondition};
 
@@ -13,27 +12,67 @@ pub trait SqlDefinition: Sync + Send {
     fn expand(&self, condition: &str) -> String;
 }
 
+/// A ProviderBuilder provides an easy way to build entity providers. It has ownership over the
+/// connetion so use it only when you can give it the connection.
+pub struct ProviderBuilder {
+    client: Client,
+}
+
+impl ProviderBuilder {
+    /// Create a new builder instance. This takes the ownership over the Postgres client.
+    pub fn new(client: Client) -> Self {
+        Self { client }
+    }
+
+    /// Return a borrow of the internal Postgres client.
+    pub fn get_client(&self) -> &Client {
+        &self.client
+    }
+
+    /// Create a new Provider
+    pub fn build_provider<T>(&self, definition: Box<dyn SqlDefinition>) -> Provider<'_, T>
+    where
+        T: SqlEntity,
+    {
+        Provider {
+            client: &self.client,
+            definition,
+            _entity_type: PhantomData,
+        }
+    }
+}
+
 /// A Provider uses an entity associated Projection to issue SQL queries and
 /// return an iterator over results.
-#[async_trait]
-pub trait Provider<T>
+pub struct Provider<'client, T>
 where
-    T: SqlEntity + Send,
+    T: SqlEntity,
 {
-    /// Return the SQL definition of this Provider.
-    fn get_definition(&self) -> &dyn SqlDefinition;
+    client: &'client Client,
+    definition: Box<dyn SqlDefinition>,
+    _entity_type: PhantomData<T>,
+}
+
+impl<'client, T> Provider<'client, T>
+where
+    T: SqlEntity,
+{
+    /// Constructor
+    pub fn new(client: &'client Client, definition: Box<dyn SqlDefinition>) -> Self {
+        Self {
+            client,
+            definition,
+            _entity_type: PhantomData,
+        }
+    }
 
     /// Launch a SQL statement to fetch the associated entities.
-    async fn fetch(
-        &self,
-        client: &PgClient,
-        condition: WhereCondition<'_>,
-    ) -> Result<Vec<T>, Box<dyn Error>> {
+    pub async fn fetch(&self, condition: WhereCondition<'_>) -> Result<Vec<T>, Box<dyn Error>> {
         let (expression, parameters) = condition.expand();
-        let sql = self.get_definition().expand(&expression);
+        let sql = self.definition.expand(&expression);
         let mut items: Vec<T> = Vec::new();
 
-        for row in client.query(&sql, parameters.as_slice()).await? {
+        for row in self.client.query(&sql, parameters.as_slice()).await? {
             items.push(T::hydrate(row)?);
         }
 
