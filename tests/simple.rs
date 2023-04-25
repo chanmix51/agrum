@@ -1,3 +1,7 @@
+mod utils;
+
+use utils::get_config;
+
 use std::error::Error;
 
 use agrum::{
@@ -94,7 +98,7 @@ impl<'client> WhateverEntityRepository<'client> {
 }
 
 async fn get_client() -> Client {
-    let config = std::fs::read_to_string("tests/config.txt").unwrap();
+    let config = get_config(vec![]).unwrap();
     let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
