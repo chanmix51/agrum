@@ -1,9 +1,13 @@
+mod utils;
+
+use utils::get_config;
+
 use std::error::Error;
 
 use agrum::{
     core::{
-        HydrationError, Projection, Provider, SourceAliases, SqlDefinition, SqlEntity, Structure,
-        Structured, WhereCondition,
+        HydrationError, Projection, Provider, ProviderBuilder, SourceAliases, SqlDefinition,
+        SqlEntity, Structure, Structured, WhereCondition,
     },
     params,
 };
@@ -60,46 +64,41 @@ impl SqlDefinition for WhateverSqlDefinition {
     fn expand(&self, condition: &str) -> String {
         let projection = self.projection.expand(&self.source_aliases);
 
-        format!("select {projection} from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe) where {condition}")
+        format!(
+            r#"
+select {projection}
+from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe)
+where {condition}"#
+        )
     }
 }
 
-pub struct WhateverEntityProvider<'client> {
-    client: &'client Client,
-    definition: WhateverSqlDefinition,
+struct WhateverEntityRepository<'client> {
+    provider: Provider<'client, WhateverEntity>,
 }
 
-impl<'client> Provider<WhateverEntity> for WhateverEntityProvider<'client> {
-    fn get_definition(&self) -> &dyn SqlDefinition {
-        &self.definition
-    }
-}
-
-impl<'client> WhateverEntityProvider<'client> {
-    pub fn new(client: &'client Client, projection: Projection<WhateverEntity>) -> Self {
-        Self {
-            client,
-            definition: WhateverSqlDefinition::new(projection),
-        }
+impl<'client> WhateverEntityRepository<'client> {
+    pub fn new(provider: Provider<'client, WhateverEntity>) -> Self {
+        Self { provider }
     }
 
-    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error>> {
-        self.fetch(self.client, WhereCondition::default()).await
+    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error + Sync + Send>> {
+        self.provider.fetch(WhereCondition::default()).await
     }
 
     pub async fn fetch_by_id(
         &self,
         thing_id: i32,
-    ) -> Result<Option<WhateverEntity>, Box<dyn Error>> {
+    ) -> Result<Option<WhateverEntity>, Box<dyn Error + Sync + Send>> {
         let condition = WhereCondition::new("thing_id = $?", params![thing_id]);
-        let entity = self.fetch(self.client, condition).await?.pop();
+        let entity = self.provider.fetch(condition).await?.pop();
 
         Ok(entity)
     }
 }
 
 async fn get_client() -> Client {
-    let config = std::fs::read_to_string("tests/config.txt").unwrap();
+    let config = get_config(vec![]).unwrap();
     let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
     tokio::spawn(async move {
         if let Err(e) = connection.await {
@@ -112,13 +111,15 @@ async fn get_client() -> Client {
 
 #[tokio::test]
 async fn provider_no_filter() {
-    // Connect to the database.
-    let client = get_client().await;
-    let provider = WhateverEntityProvider::new(&client, Projection::<WhateverEntity>::default());
+    // This example uses the provider builder to create the internal provider used by the
+    // repository. Types are implied by the definitions.
+    let provider_builder = ProviderBuilder::new(get_client().await);
+    let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
+    let repository = WhateverEntityRepository::new(provider_builder.build_provider(sql_definition));
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
-    let entities = provider.fetch_all().await.unwrap();
+    let entities = repository.fetch_all().await.unwrap();
 
     assert_eq!(
         vec![
@@ -141,11 +142,12 @@ async fn provider_no_filter() {
 
 #[tokio::test]
 async fn provider_with_filter() {
-    // Connect to the database.
     let client = get_client().await;
-    let provider = WhateverEntityProvider::new(&client, Projection::<WhateverEntity>::default());
+    let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
+    let provider = Provider::new(&client, sql_definition);
+    let repository = WhateverEntityRepository::new(provider);
 
-    let entity = provider
+    let entity = repository
         .fetch_by_id(1)
         .await
         .unwrap()
