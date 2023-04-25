@@ -18,9 +18,9 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install PG
       run: |
-        apt install postgres
-        su -c "createuser agrum" - postgres
-        su -c 'createdb -O agrum agrum' - postgres
+        sudo apt install postgres
+        sudo su -c "createuser agrum" - postgres
+        sudo su -c 'createdb -O agrum agrum' - postgres
     - name: Check
       run: cargo check
     - name: Build
