@@ -12,4 +12,6 @@ pub use projection::{Projection, SourceAliases};
 pub use provider::{Provider, ProviderBuilder, SqlDefinition};
 pub use source::{SourcesCatalog, SqlSource};
 pub use structure::{Structure, Structured};
-pub use transaction::{IsolationLevel, Transaction, TransactionType};
+pub use transaction::{
+    IsolationLevel, Transaction, TransactionStatus, TransactionToken, TransactionType,
+};

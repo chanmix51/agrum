@@ -2,7 +2,7 @@ mod utils;
 
 use utils::get_config;
 
-use agrum::core::{ProviderBuilder, Transaction};
+use agrum::core::{Transaction, TransactionStatus, TransactionToken};
 
 use tokio_postgres::{Client, NoTls};
 
@@ -21,40 +21,33 @@ async fn get_client() -> Client {
 #[tokio::test]
 async fn transaction_commit() {
     // This example shows how to perform transactions
-    let provider_builder = ProviderBuilder::new(get_client().await);
-    let transaction = Transaction::default();
-    provider_builder
-        .execute(&transaction.start())
-        .await
-        .unwrap();
-    provider_builder
-        .execute(&transaction.set_savepoint("whatever"))
-        .await
-        .unwrap();
-    provider_builder
-        .execute(&transaction.rollback_to_savepoint("whatever"))
-        .await
-        .unwrap();
-    provider_builder
-        .execute(&transaction.commit())
-        .await
-        .unwrap();
+    let client = get_client().await;
+    let mut transaction = Transaction::new(&client, TransactionToken::default());
+    assert_eq!(TransactionStatus::Unstarted, transaction.get_status());
+
+    transaction.start().await.unwrap();
+    assert_eq!(TransactionStatus::Started, transaction.get_status());
+
+    transaction.set_savepoint("whatever").await.unwrap();
+    assert_eq!(TransactionStatus::Started, transaction.get_status());
+
+    transaction.rollback_to_savepoint("whatever").await.unwrap();
+    assert_eq!(TransactionStatus::Started, transaction.get_status());
+
+    transaction.release_savepoint("whatever").await.unwrap();
+    assert_eq!(TransactionStatus::Started, transaction.get_status());
+
+    transaction.commit().await.unwrap();
+    assert_eq!(TransactionStatus::Committed, transaction.get_status());
 }
 
 #[tokio::test]
 async fn transaction_rollback() {
-    let provider_builder = ProviderBuilder::new(get_client().await);
-    let transaction = Transaction::default();
-    provider_builder
-        .execute(&transaction.start())
-        .await
-        .unwrap();
-    provider_builder
-        .execute(&transaction.set_savepoint("whatever"))
-        .await
-        .unwrap();
-    provider_builder
-        .execute(&transaction.rollback())
-        .await
-        .unwrap();
+    let client = get_client().await;
+    let mut transaction = Transaction::new(&client, TransactionToken::default());
+
+    transaction.start().await.unwrap();
+    transaction.rollback().await.unwrap();
+
+    assert_eq!(TransactionStatus::Aborted, transaction.get_status());
 }

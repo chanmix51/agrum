@@ -29,7 +29,7 @@ impl SqlEntity for DbMessage {
     }
 }
 
-/// SQL query
+/// SQL query, there is no need for a managed projection in this example.
 #[derive(Debug, Default)]
 struct HelloWorldDbMessageDefinition;
 

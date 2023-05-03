@@ -1,4 +1,8 @@
-use std::fmt::Display;
+use std::{error::Error, fmt::Display};
+
+use tokio_postgres::Client;
+
+use crate::StdResult;
 
 /// PostgreSQL transaction [isolation
 /// levels](https://www.postgresql.org/docs/current/transaction-iso.html).
@@ -42,18 +46,18 @@ impl Display for TransactionType {
     }
 }
 
-pub struct Transaction {
+pub struct TransactionToken {
     isolation_level: IsolationLevel,
     transaction_type: TransactionType,
 }
 
-impl Default for Transaction {
+impl Default for TransactionToken {
     fn default() -> Self {
         Self::new(IsolationLevel::ReadCommitted, TransactionType::ReadWrite)
     }
 }
 
-impl Transaction {
+impl TransactionToken {
     /// Constructor
     pub fn new(isolation_level: IsolationLevel, transaction_type: TransactionType) -> Self {
         Self {
@@ -106,13 +110,135 @@ impl Transaction {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum TransactionStatus {
+    Unstarted,
+    Started,
+    Committed,
+    Aborted,
+}
+
+impl Display for TransactionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unstarted => write!(f, "unstarted"),
+            Self::Started => write!(f, "started"),
+            Self::Committed => write!(f, "committed"),
+            Self::Aborted => write!(f, "aborted"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TransactionError {
+    WrongState {
+        actual: TransactionStatus,
+        expected: TransactionStatus,
+    },
+}
+
+impl Display for TransactionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongState { actual, expected } => write!(
+                f,
+                "State error, transaction is in state {actual} while {expected} was expected."
+            ),
+        }
+    }
+}
+
+impl Error for TransactionError {}
+
+pub struct Transaction<'client> {
+    client: &'client Client,
+    token: TransactionToken,
+    status: TransactionStatus,
+}
+
+impl<'client> Transaction<'client> {
+    pub fn new(client: &'client Client, token: TransactionToken) -> Self {
+        Self {
+            client,
+            token,
+            status: TransactionStatus::Unstarted,
+        }
+    }
+
+    fn check_status(&self, state: TransactionStatus) -> Result<(), TransactionError> {
+        if state != self.status {
+            Err(TransactionError::WrongState {
+                actual: self.status.clone(),
+                expected: state,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn get_status(&self) -> TransactionStatus {
+        self.status.clone()
+    }
+
+    pub async fn start(&mut self) -> StdResult<()> {
+        self.check_status(TransactionStatus::Unstarted)?;
+        self.client.execute(&self.token.start(), &[]).await?;
+        self.status = TransactionStatus::Started;
+
+        Ok(())
+    }
+
+    pub async fn commit(&mut self) -> StdResult<()> {
+        self.check_status(TransactionStatus::Started)?;
+        self.client.execute(&self.token.commit(), &[]).await?;
+        self.status = TransactionStatus::Committed;
+
+        Ok(())
+    }
+
+    pub async fn rollback(&mut self) -> StdResult<()> {
+        self.check_status(TransactionStatus::Started)?;
+        self.client.execute(&self.token.rollback(), &[]).await?;
+        self.status = TransactionStatus::Aborted;
+
+        Ok(())
+    }
+
+    pub async fn rollback_to_savepoint(&self, savepoint: &str) -> StdResult<()> {
+        self.check_status(TransactionStatus::Started)?;
+        self.client
+            .execute(&self.token.rollback_to_savepoint(savepoint), &[])
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn release_savepoint(&self, savepoint: &str) -> StdResult<()> {
+        self.check_status(TransactionStatus::Started)?;
+        self.client
+            .execute(&self.token.release_savepoint(savepoint), &[])
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn set_savepoint(&self, savepoint: &str) -> StdResult<()> {
+        self.check_status(TransactionStatus::Started)?;
+        self.client
+            .execute(&self.token.set_savepoint(savepoint), &[])
+            .await?;
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn start_transaction_read_commited_read_write() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
         let query = transaction.start();
 
         assert_eq!(
@@ -124,7 +250,7 @@ mod tests {
     #[test]
     fn start_transaction_read_commited_read_only() {
         let transaction =
-            Transaction::new(IsolationLevel::ReadCommitted, TransactionType::ReadOnly);
+            TransactionToken::new(IsolationLevel::ReadCommitted, TransactionType::ReadOnly);
         let query = transaction.start();
 
         assert_eq!(
@@ -135,7 +261,7 @@ mod tests {
 
     #[test]
     fn start_transaction_repeatable_read_read_write() {
-        let transaction = Transaction::repeatable_read();
+        let transaction = TransactionToken::repeatable_read();
         let query = transaction.start();
 
         assert_eq!(
@@ -147,7 +273,7 @@ mod tests {
     #[test]
     fn start_transaction_repeatable_read_read_only() {
         let transaction =
-            Transaction::new(IsolationLevel::RepeatableRead, TransactionType::ReadOnly);
+            TransactionToken::new(IsolationLevel::RepeatableRead, TransactionType::ReadOnly);
         let query = transaction.start();
 
         assert_eq!(
@@ -158,7 +284,7 @@ mod tests {
 
     #[test]
     fn start_transaction_serializable_read_write() {
-        let transaction = Transaction::serializable();
+        let transaction = TransactionToken::serializable();
         let query = transaction.start();
 
         assert_eq!(
@@ -169,7 +295,8 @@ mod tests {
 
     #[test]
     fn start_transaction_serializable_read_only() {
-        let transaction = Transaction::new(IsolationLevel::Serializable, TransactionType::ReadOnly);
+        let transaction =
+            TransactionToken::new(IsolationLevel::Serializable, TransactionType::ReadOnly);
         let query = transaction.start();
 
         assert_eq!(
@@ -180,14 +307,14 @@ mod tests {
 
     #[test]
     fn rollback_transaction() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
 
         assert_eq!("rollback".to_string(), transaction.rollback());
     }
 
     #[test]
     fn rollback_to_savepoint() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
 
         assert_eq!(
             "rollback to savepoint whatever".to_string(),
@@ -197,7 +324,7 @@ mod tests {
 
     #[test]
     fn set_savepoint() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
 
         assert_eq!(
             "savepoint whatever".to_string(),
@@ -207,7 +334,7 @@ mod tests {
 
     #[test]
     fn release_savepoint() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
 
         assert_eq!(
             "release savepoint whatever".to_string(),
@@ -217,7 +344,7 @@ mod tests {
 
     #[test]
     fn commit_transaction() {
-        let transaction = Transaction::default();
+        let transaction = TransactionToken::default();
 
         assert_eq!("commit".to_string(), transaction.commit());
     }

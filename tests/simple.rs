@@ -13,6 +13,7 @@ use agrum::{
 };
 use tokio_postgres::{Client, NoTls, Row};
 
+/// Entity that will be hydrated from query results.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WhateverEntity {
     entity_id: i32,
@@ -21,6 +22,7 @@ pub struct WhateverEntity {
     something: Option<i32>,
 }
 
+/// Database representation of this entity.
 impl Structured for WhateverEntity {
     fn get_structure() -> Structure {
         Structure::new(&[
@@ -32,6 +34,7 @@ impl Structured for WhateverEntity {
     }
 }
 
+/// How to create instances from query results.
 impl SqlEntity for WhateverEntity {
     fn hydrate(row: Row) -> Result<Self, HydrationError>
     where
@@ -46,12 +49,15 @@ impl SqlEntity for WhateverEntity {
     }
 }
 
+/// A simple query that maps the table to the entity.
+/// It uses a managed projection that pops out [WhateverEntity] instances.
 struct WhateverSqlDefinition {
     projection: Projection<WhateverEntity>,
     source_aliases: SourceAliases,
 }
 
 impl WhateverSqlDefinition {
+    /// Constructor
     pub fn new(projection: Projection<WhateverEntity>) -> Self {
         Self {
             projection,
@@ -73,6 +79,8 @@ where {condition}"#
     }
 }
 
+/// Repositories are a good place to perform several queries through several providers. It manages
+/// conditions and transactions.
 struct WhateverEntityRepository<'client> {
     provider: Provider<'client, WhateverEntity>,
 }
@@ -97,6 +105,7 @@ impl<'client> WhateverEntityRepository<'client> {
     }
 }
 
+/// This function is used by different test cases; it creates a connection and return a client.
 async fn get_client() -> Client {
     let config = get_config(vec![]).unwrap();
     let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
@@ -142,6 +151,7 @@ async fn provider_no_filter() {
 
 #[tokio::test]
 async fn provider_with_filter() {
+    // In this example, the provider is used directly in the code without the provider_builder.
     let client = get_client().await;
     let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
     let provider = Provider::new(&client, sql_definition);
