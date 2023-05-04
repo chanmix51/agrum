@@ -1,17 +1,19 @@
 use std::marker::PhantomData;
 
-use tokio_postgres::Client;
+use tokio_postgres::{types::ToSql, Client};
 
 use crate::StdResult;
 
 use super::{SqlEntity, WhereCondition};
+
+pub type SqlQueryWithParameters<'a> = (String, Vec<&'a (dyn ToSql + Sync)>);
 
 /// Whatever that aims to be a database data source (query, table, function
 /// etc.) This has to be the SQL definition as it will be interpreted by
 /// Postgres.
 pub trait SqlDefinition: Sync + Send {
     /// SQL that is sent to Postgres (parameters shall be marked as `$?`)
-    fn expand(&self, condition: &str) -> String;
+    fn expand<'a>(&self, condition: WhereCondition<'a>) -> SqlQueryWithParameters<'a>;
 }
 
 /// A ProviderBuilder provides an easy way to build entity providers. It has ownership over the
@@ -77,8 +79,7 @@ where
 
     /// Launch a SQL statement to fetch the associated entities.
     pub async fn fetch(&self, condition: WhereCondition<'_>) -> StdResult<Vec<T>> {
-        let (expression, parameters) = condition.expand();
-        let sql = self.definition.expand(&expression);
+        let (sql, parameters) = self.definition.expand(condition);
         let mut items: Vec<T> = Vec::new();
 
         for row in self.client.query(&sql, parameters.as_slice()).await? {

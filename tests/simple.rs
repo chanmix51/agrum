@@ -7,7 +7,7 @@ use std::error::Error;
 use agrum::{
     core::{
         HydrationError, Projection, Provider, ProviderBuilder, SourceAliases, SqlDefinition,
-        SqlEntity, Structure, Structured, WhereCondition,
+        SqlEntity, SqlQueryWithParameters, Structure, Structured, WhereCondition,
     },
     params,
 };
@@ -67,15 +67,18 @@ impl WhateverSqlDefinition {
 }
 
 impl SqlDefinition for WhateverSqlDefinition {
-    fn expand(&self, condition: &str) -> String {
+    fn expand<'a>(&self, condition: WhereCondition<'a>) -> SqlQueryWithParameters<'a> {
         let projection = self.projection.expand(&self.source_aliases);
+        let (condition, params) = condition.expand(&self.source_aliases);
 
-        format!(
+        let sql = format!(
             r#"
 select {projection}
 from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe)
 where {condition}"#
-        )
+        );
+
+        (sql, params)
     }
 }
 

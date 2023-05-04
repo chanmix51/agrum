@@ -2,11 +2,15 @@ use std::iter::repeat;
 
 use tokio_postgres::types::ToSql;
 
+use super::SourceAliases;
+
 #[macro_export]
 macro_rules! params {
     ($( $x:expr ),*) => {
         {
+            #[allow(unused_imports)]
             use tokio_postgres::types::ToSql;
+            #[allow(unused_mut)]
             let mut params = Vec::new();
             $(
                 params.push(&$x as &(dyn ToSql + Sync));
@@ -69,7 +73,7 @@ impl<'a> WhereCondition<'a> {
         }
     }
 
-    pub fn expand(self) -> (String, Vec<&'a (dyn ToSql + Sync)>) {
+    pub fn expand(self, source_aliases: &SourceAliases) -> (String, Vec<&'a (dyn ToSql + Sync)>) {
         let mut expression = self.condition.expand();
         let parameters = self.parameters;
         let mut param_index = 1;
@@ -82,6 +86,12 @@ impl<'a> WhereCondition<'a> {
             expression = expression.replacen("$?", &format!("${param_index}"), 1);
             param_index += 1;
         }
+        let expression = source_aliases
+            .get_aliases()
+            .iter()
+            .fold(expression, |expression, (name, alias)| {
+                expression.replace(&format!("{{:{name}:}}"), alias)
+            });
 
         (expression, parameters)
     }
@@ -173,7 +183,7 @@ mod tests {
     #[test]
     fn expression_default() {
         let expression = WhereCondition::default();
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("true".to_string(), sql);
         assert!(params.is_empty());
@@ -182,7 +192,7 @@ mod tests {
     #[test]
     fn expression_sql() {
         let expression = WhereCondition::new("something is not null", Vec::new());
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("something is not null".to_string(), sql);
         assert!(params.is_empty());
@@ -192,7 +202,7 @@ mod tests {
     fn expression_and() {
         let expression =
             WhereCondition::new("A", Vec::new()).and_where(WhereCondition::new("B", Vec::new()));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A and B", &sql);
         assert!(params.is_empty());
@@ -201,7 +211,7 @@ mod tests {
     #[test]
     fn expression_and_none() {
         let expression = WhereCondition::new("A", Vec::new()).and_where(WhereCondition::default());
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A", &sql);
         assert!(params.is_empty());
@@ -210,7 +220,7 @@ mod tests {
     #[test]
     fn expression_none_and() {
         let expression = WhereCondition::default().and_where(WhereCondition::new("A", Vec::new()));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A", &sql);
         assert!(params.is_empty());
@@ -220,7 +230,7 @@ mod tests {
     fn expression_or() {
         let expression =
             WhereCondition::new("A", Vec::new()).or_where(WhereCondition::new("B", Vec::new()));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A or B", &sql);
         assert!(params.is_empty());
@@ -229,7 +239,7 @@ mod tests {
     #[test]
     fn expression_or_none() {
         let expression = WhereCondition::new("A", Vec::new()).or_where(WhereCondition::default());
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A", &sql);
         assert!(params.is_empty());
@@ -238,7 +248,7 @@ mod tests {
     #[test]
     fn expression_none_or() {
         let expression = WhereCondition::default().or_where(WhereCondition::new("A", Vec::new()));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A", &sql);
         assert!(params.is_empty());
@@ -249,7 +259,7 @@ mod tests {
         let expression = WhereCondition::new("A", Vec::new())
             .and_where(WhereCondition::new("B", Vec::new()))
             .or_where(WhereCondition::new("C", Vec::new()));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A and B or C", &sql);
         assert!(params.is_empty());
@@ -260,7 +270,7 @@ mod tests {
         let sub_expression =
             WhereCondition::new("A", Vec::new()).or_where(WhereCondition::new("B", Vec::new()));
         let expression = WhereCondition::new("C", Vec::new()).and_where(sub_expression);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("C and (A or B)", &sql);
         assert!(params.is_empty());
@@ -272,7 +282,7 @@ mod tests {
         let expression = WhereCondition::new("A", Vec::new())
             .or_where(WhereCondition::new("B", Vec::new()))
             .and_where(sub_expression);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("(A or B) and C", &sql);
         assert!(params.is_empty());
@@ -285,7 +295,7 @@ mod tests {
         let expression = WhereCondition::new("A", Vec::new())
             .or_where(WhereCondition::new("B", Vec::new()))
             .and_where(sub_expression);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("(A or B) and (C or D)", &sql);
         assert!(params.is_empty());
@@ -294,7 +304,7 @@ mod tests {
     #[test]
     fn expression_sql_with_parameter() {
         let expression = WhereCondition::new("A > $?::pg_type", params![0_i32]);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A > $1::pg_type", &sql);
         assert_eq!(1, params.len());
@@ -304,7 +314,7 @@ mod tests {
     fn expression_sql_with_multiple_parameters() {
         let expression = WhereCondition::new("A > $?::pg_type", params![0_i32])
             .and_where(WhereCondition::new("B = $?", params![1_i32]));
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A > $1::pg_type and B = $2", &sql);
         assert_eq!(2, params.len());
@@ -313,7 +323,7 @@ mod tests {
     #[test]
     fn expression_where_in() {
         let expression = WhereCondition::where_in("A", params![0_i32, 1_i32]);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("A in ($1, $2)".to_string(), sql);
         assert_eq!(2, params.len());
@@ -328,7 +338,7 @@ mod tests {
                 params![100_i32, 101_i32, 102_i32],
             ));
 
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
         assert_eq!(4, params.len());
@@ -337,9 +347,26 @@ mod tests {
     #[test]
     fn parameters_tosql() {
         let expression = WhereCondition::new("a = $?", params!["whatever"]);
-        let (sql, params) = expression.expand();
+        let (sql, params) = expression.expand(&SourceAliases::default());
 
         assert_eq!("a = $1", &sql);
         assert_eq!(1, params.len());
+    }
+
+    #[test]
+    fn source_aliases_in_condition() {
+        let expression = WhereCondition::new("{:one:}.A > $?::pg_type", params![0_i32])
+            .or_where(WhereCondition::new("{:one:}.B", Vec::new()))
+            .and_where(WhereCondition::where_in(
+                "{:two:}.C",
+                params![100_i32, 101_i32, 102_i32],
+            ));
+        let source_aliases = SourceAliases::new(&[("one", "test_one"), ("two", "test_two")]);
+        let (sql, _params) = expression.expand(&source_aliases);
+
+        assert_eq!(
+            "(test_one.A > $1::pg_type or test_one.B) and test_two.C in ($2, $3, $4)",
+            &sql
+        );
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::{hash_map::Iter, HashMap};
 
-use super::{SqlDefinition, Structure};
+use super::{SqlDefinition, SqlQueryWithParameters, Structure, WhereCondition};
 
 /// This represent a SQL data source. It can be a table, a SQL function, a query
 /// etc. A Source is a definition hence it can be expanded.
@@ -26,7 +26,11 @@ impl SourcesCatalog {
     }
 
     /// Expand the given source's definition. Panics if the source does not exist.
-    pub fn expand(&self, source: &str, condition: &str) -> String {
+    pub fn expand<'a>(
+        &self,
+        source: &str,
+        condition: WhereCondition<'a>,
+    ) -> SqlQueryWithParameters<'a> {
         self.sources
             .get(source)
             .unwrap_or_else(|| {
@@ -49,6 +53,8 @@ impl SourcesCatalog {
 
 #[cfg(test)]
 mod tests {
+    use crate::{core::SourceAliases, params};
+
     use super::*;
 
     struct TestSource;
@@ -60,8 +66,10 @@ mod tests {
     }
 
     impl SqlDefinition for TestSource {
-        fn expand(&self, condition: &str) -> String {
-            format!("DEF COND[{condition}]")
+        fn expand<'a>(&self, condition: WhereCondition<'a>) -> SqlQueryWithParameters<'a> {
+            let (condition, params) = condition.expand(&SourceAliases::default());
+
+            (format!("DEF COND[{condition}]"), params)
         }
     }
 
@@ -69,11 +77,10 @@ mod tests {
     fn expand_source_catalog() {
         let mut catalog = SourcesCatalog::default();
         catalog.add_source("some_source", Box::new(TestSource));
+        let (source, _params) =
+            catalog.expand("some_source", WhereCondition::new("whatever", params![]));
 
-        assert_eq!(
-            "DEF COND[whatever]".to_string(),
-            catalog.expand("some_source", "whatever")
-        );
+        assert_eq!("DEF COND[whatever]".to_string(), source);
     }
 
     #[test]
@@ -82,6 +89,6 @@ mod tests {
         let mut catalog = SourcesCatalog::default();
         catalog.add_source("some_source", Box::new(TestSource));
 
-        let _ = catalog.expand("bad_source", "");
+        let _ = catalog.expand("bad_source", WhereCondition::new("whatever", params![]));
     }
 }

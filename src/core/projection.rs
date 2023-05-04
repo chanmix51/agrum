@@ -4,7 +4,7 @@ use super::{SourcesCatalog, SqlEntity, Structure};
 
 //pub type SourceAliases = HashMap<String, String>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SourceAliases {
     aliases: HashMap<String, String>,
 }

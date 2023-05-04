@@ -3,7 +3,8 @@ mod utils;
 use utils::get_config;
 
 use agrum::core::{
-    HydrationError, Provider, SqlDefinition, SqlEntity, Structure, Structured, WhereCondition,
+    HydrationError, Provider, SourceAliases, SqlDefinition, SqlEntity, SqlQueryWithParameters,
+    Structure, Structured, WhereCondition,
 };
 use tokio_postgres::{NoTls, Row};
 
@@ -34,8 +35,11 @@ impl SqlEntity for DbMessage {
 struct HelloWorldDbMessageDefinition;
 
 impl SqlDefinition for HelloWorldDbMessageDefinition {
-    fn expand(&self, _condition: &str) -> String {
-        format!(r#"select 'hello world' as message"#)
+    fn expand<'a>(&self, condition: WhereCondition<'a>) -> SqlQueryWithParameters<'a> {
+        let (_condition, params) = condition.expand(&SourceAliases::default());
+        let sql = format!(r#"select 'hello world' as message"#);
+
+        (sql, params)
     }
 }
 
