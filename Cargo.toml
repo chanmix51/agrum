@@ -1,7 +1,14 @@
 [package]
 name = "agrum"
-version = "0.2.0"
+version = "0.2.2"
+authors = ["Grégoire HUBERT <hubert.greg@gmail.com>"]
 edition = "2021"
+readme = "README.md"
+license = "CC by-sa 4.0"
+license-file = "LICENSE.txt"
+description = "This is an OMM database layer."
+repository = "https://github.com/chanmix51/agrum"
+keywords = ["database", "postgres"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

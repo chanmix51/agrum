@@ -79,13 +79,13 @@ where {condition}"#
     }
 }
 
-/// Repositories are a good place to perform several queries through several providers. It manages
-/// conditions and transactions.
-struct WhateverEntityRepository<'client> {
+/// Repositories are a good place to perform several queries through several
+/// providers. It manages conditions and transactions.
+struct WhateverDataBook<'client> {
     provider: Provider<'client, WhateverEntity>,
 }
 
-impl<'client> WhateverEntityRepository<'client> {
+impl<'client> WhateverDataBook<'client> {
     pub fn new(provider: Provider<'client, WhateverEntity>) -> Self {
         Self { provider }
     }
@@ -124,7 +124,7 @@ async fn provider_no_filter() {
     // repository. Types are implied by the definitions.
     let provider_builder = ProviderBuilder::new(get_client().await);
     let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
-    let repository = WhateverEntityRepository::new(provider_builder.build_provider(sql_definition));
+    let repository = WhateverDataBook::new(provider_builder.build_provider(sql_definition));
 
     // The connection object performs the actual communication with the database,
     // so spawn it off to run on its own.
@@ -155,7 +155,7 @@ async fn provider_with_filter() {
     let client = get_client().await;
     let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
     let provider = Provider::new(&client, sql_definition);
-    let repository = WhateverEntityRepository::new(provider);
+    let repository = WhateverDataBook::new(provider);
 
     let entity = repository
         .fetch_by_id(1)
