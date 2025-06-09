@@ -2,8 +2,6 @@ use std::{collections::HashMap, marker::PhantomData};
 
 use super::{SourcesCatalog, SqlEntity, Structure};
 
-//pub type SourceAliases = HashMap<String, String>;
-
 #[derive(Debug, Default)]
 pub struct SourceAliases {
     aliases: HashMap<String, String>,

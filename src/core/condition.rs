@@ -1,4 +1,4 @@
-use std::iter::repeat;
+use std::iter::repeat_n;
 
 use tokio_postgres::types::ToSql;
 
@@ -87,7 +87,7 @@ impl<'a> WhereCondition<'a> {
     }
 
     pub fn where_in(field: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
-        let params: Vec<&str> = repeat("$?").take(parameters.len()).collect();
+        let params: Vec<&str> = repeat_n("$?", parameters.len()).collect();
         let expression = format!("{} in ({})", field, params.join(", "));
 
         Self {
