@@ -1,7 +1,7 @@
-use std::fmt::Display;
 use std::error::Error;
+use std::fmt::Display;
 
-use tokio_postgres::{error::Error as PgError, Row};
+use tokio_postgres::{Row, error::Error as PgError};
 
 use crate::Projection;
 
@@ -69,7 +69,6 @@ impl Structure {
 pub trait Structured {
     fn get_structure() -> Structure;
 }
-
 
 /// Error raised during entity hydration process.
 #[derive(Debug)]

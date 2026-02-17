@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, fmt::Display, marker::PhantomData};
 
 use crate::{SqlEntity, ToSqlAny, WhereCondition};
 
@@ -39,17 +39,6 @@ impl<'a, T: SqlEntity> SqlQuery<'a, T> {
         self
     }
 
-    /// Return a string representation of the query by replacing the variables
-    /// with their values.  This is the query that will be sent to the server
-    /// without the condition (if any) nor the parameters.
-    pub fn to_string(&self) -> String {
-        let mut query = self.query.clone();
-        for (name, value) in &self.variables {
-            query = query.replace(&format!("{{:{name}:}}"), value);
-        }
-        query
-    }
-
     /// Return the variables of the query.
     pub fn get_variables(&self) -> &HashMap<&'a str, String> {
         &self.variables
@@ -70,14 +59,23 @@ impl<'a, T: SqlEntity> SqlQuery<'a, T> {
     }
 }
 
+impl<'a, T: SqlEntity> Display for SqlQuery<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut query = self.query.clone();
+        for (name, value) in &self.variables {
+            query = query.replace(&format!("{{:{name}:}}"), value);
+        }
+        write!(f, "{}", query)
+    }
+}
+
 pub trait QueryBook<T: SqlEntity> {
     /// Return the definition of the SQL data source.
     /// It could be a table name or a view name or a values list or function or
     /// even a sub-query.
     fn get_sql_source(&self) -> &'static str;
-
 }
-pub trait ReadQueryBook<T: SqlEntity> : QueryBook<T> {
+pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
     /// Return the definition of the SQL query.
     /// It could be a select statement or an insert statement or a update statement or a delete statement.
     fn get_sql_definition(&self) -> &'static str {
@@ -87,8 +85,9 @@ pub trait ReadQueryBook<T: SqlEntity> : QueryBook<T> {
     fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
-        query.set_variable("projection", &T::get_projection().expand())
-            .set_variable("source", &self.get_sql_source())
+        query
+            .set_variable("projection", &T::get_projection().expand())
+            .set_variable("source", self.get_sql_source())
             .set_variable("condition", &conditions.to_string())
             .set_parameters(parameters);
 
@@ -132,8 +131,11 @@ mod tests {
     #[test]
     fn test_to_string() {
         let query = {
-            let mut query = SqlQuery::<TestSqlEntity>::new("SELECT {:projection:} FROM my_table WHERE {:condition:}");
-            query.set_variable("projection", &TestSqlEntity::get_projection().expand())
+            let mut query = SqlQuery::<TestSqlEntity>::new(
+                "SELECT {:projection:} FROM my_table WHERE {:condition:}",
+            );
+            query
+                .set_variable("projection", &TestSqlEntity::get_projection().expand())
                 .set_variable("condition", "1 = $1")
                 .add_parameter(&1_i32);
             query
@@ -147,7 +149,9 @@ mod tests {
         assert_eq!(variables.len(), 2);
         assert_eq!(variables["projection"], "id as id, name as name");
         let result = query.to_string();
-        assert_eq!(&result, "SELECT id as id, name as name FROM my_table WHERE 1 = $1");
-
+        assert_eq!(
+            &result,
+            "SELECT id as id, name as name FROM my_table WHERE 1 = $1"
+        );
     }
 }

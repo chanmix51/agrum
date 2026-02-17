@@ -1,17 +1,24 @@
-use std::{marker::PhantomData, pin::Pin, task::{Context, Poll}};
+use std::{
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
+use crate::{Result, SqlEntity, SqlQuery};
 use futures_core::Stream;
 use tokio_postgres::{RowStream, Transaction as TokioTransaction, types::ToSql};
-use crate::{Result, SqlEntity, SqlQuery};
 
 pub struct EntityStream<T: SqlEntity> {
     stream: RowStream,
     _phantom: PhantomData<T>,
 }
 
-impl<'a, T: SqlEntity> EntityStream<T> {
+impl<T: SqlEntity> EntityStream<T> {
     pub fn new(stream: RowStream) -> Self {
-        Self { stream, _phantom: PhantomData }
+        Self {
+            stream,
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -34,8 +41,7 @@ impl<T: SqlEntity> Stream for EntityStream<T> {
     }
 }
 
-pub struct Transaction<'a> 
-{
+pub struct Transaction<'a> {
     transaction: TokioTransaction<'a>,
 }
 

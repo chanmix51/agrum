@@ -1,4 +1,4 @@
-use std::iter::repeat_n;
+use std::{fmt::Display, iter::repeat_n};
 
 use tokio_postgres::types::ToSql;
 
@@ -9,10 +9,7 @@ impl<T: ToSql + std::any::Any + Sync> ToSqlAny for T {}
 macro_rules! params {
     ($( $x:expr ),*) => {
         {
-            let mut params = Vec::new();
-            $(
-                params.push(&$x as &dyn $crate::ToSqlAny);
-            )*
+            let params = vec![$(&$x as &dyn $crate::ToSqlAny),*];
             params
         }
     };
@@ -65,16 +62,18 @@ impl<'a> Default for WhereCondition<'a> {
     }
 }
 
+impl Display for WhereCondition<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.condition.expand())
+    }
+}
+
 impl<'a> WhereCondition<'a> {
     pub fn new(expression: &str, parameters: Vec<&'a dyn ToSqlAny>) -> Self {
         Self {
             condition: BooleanCondition::Expression(expression.to_string()),
             parameters,
         }
-    }
-
-    pub fn to_string(&self) -> String {
-        self.condition.expand()
     }
 
     pub fn expand(self) -> (String, Vec<&'a dyn ToSqlAny>) {

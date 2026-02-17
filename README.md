@@ -1,92 +1,165 @@
 # Agrum
 
-Agrum is a crate designed to make the SQL code maintainable and testable while letting developpers to focus on the business value of the queries.
+Agrum is a database access layers designed to make the SQL code maintainable and
+testable while letting developpers to focus on the business value of the
+queries.
 
-This library is still in early development stage, means it is **not production ready**.
+This library is still in early development stage, means it is **not production
+ready**. If you are looking for a mature solution, have a look at
+[Elephantry](https://elephantry.github.io/)
 
 ## What is Agrum?
 
+Relational databases are a very handy way to store data because they handle
+correctly atomic concurrent transactions. Furthermore the SQL language proposes
+a vast and useful set of features that would be very tiedous to re-implement in
+Rust: filtering, sorting, joining. Being a declarative languge makes SQL a very
+solid error prone language: once a SQL query is marked 'good to go' it normally
+won't break nor fail (check your NULLs handling). This means the most you ask
+the database, the less you have to implement and test in Rust making data
+intensive operations close to the metal. 
+
 The ideas behind Agrum are:
-- mitigating the [Object-Relational impedance mismatch](https://en.wikipedia.org/wiki/Object%E2%80%93relational_impedance_mismatch) by using a Projection led mechanism
-- turning the database into a composable set of data sources
+ * mitigating the [Object-Relational impedance mismatch](https://en.wikipedia.org/wiki/Object%E2%80%93relational_impedance_mismatch) by using a Projection led mechanism
+ * make developers able to write the SQL they want
+ * have a testable database access layer
+ * turning the database into a composable set of data sources
+ * make queries eventually re-usable for different entities
 
-### Projection led framework
+ # What does working with Agrum look like?
 
-A SQL query (mostly `SELECT`) is a declarative chain of transformations. Projection is done by explicitely stating how output values are mapped. If the code allows to tune the SQL projection it maps how entities are hydrated from SQL queries.
+For now, Agrum is still under heavy work and is not even close to be production
+ready. Examples below show the state of the crate as is.
 
-```rust
-let sql = #"
-select
-  customer_id,
-  name,
-  age(datebirth) as age
-from customer
-where customer_id = *?"#;
+ ## Service layer
 
-let results = client.query(sql, &[customer_id])
-```
+ The role of the service layer is to serve controlers' demands while ensuring
+ the consistency of the state they are responsible of.
 
-The code above is fragile since a change either in the database or the application model would require all the queries to be modified.
+ ```rust
+pub async fn get_company_by_id(&self, company_id: &Uuid) -> Result<Option<Company>> {
+   let mut connection = self.pool.get()?;
+   let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+   let query = CompanyQueryBook::get_by_id(company_id);
+   transaction
+      .query(query)
+      .await?
+      .collect::<Vec<_>>()
+      .await
+      .pop()
+      .transpose()
+   // transaction is dropped here => rollback
+   // connection is dropped here and returns to the pool
+}
+ ```
 
-```rust
-let projection = get_projection();
-let sql = #"select {projection} from customer where customer_id = *?"#;
-```
+ ## QueryBooks
 
-The code above delegates the projection management to a `get_projection` function. It sets in a unique place the projection definition for all queries on the `customer` table. It is testable. It makes SQL queries easier to write.
+ QueryBooks are responsible of building the query that will be sent to the
+ database server. It is a way of making the database layer testable: be able to
+ test what query is sent to the server for each particular business demand. 
+ It uses the `WhereCondition` internally to hold the query parameters.
 
-### Modular data sources
+ With the service layer shown above, the corresponding QueryBook would be:
 
-Most of the time the source of SQL query data are tables but it can also be views, functions, sub queries, fixed sets (VALUES). In a way, data source is always a SET of data, a table being a persistent SET. Since a query can be used as a data source (being a programmable set), it is possible to chain data transformations by chaining queries exactly the same way it is done in a SQL `WITH` statement. Agrum aims at leveraging this behavior to use SQL as a mapping layer between data collection (tables) and the Rust code.
-
-## State of development
-
-As June 2025, Agrum is in early stage. The projection mechanism works but it still needs to be hardened on real world situations. The usability is still poor, it is very verbose as anything needs to be defined by hand, an annotation mechanism would ease a lot that part and is still to be done.
-
-## How to work with Agrum?
-
-Agrum organizes the database code in 3 layers:
-
- * a business oriented layer that defines what queries need to be performed and make easy to define and test conditions and parameters (clear code easy to modify)
- * a query layer that defines SQL queries which is separated into projections and definitions that can be unit tested (not often modified)
- * a database layer that hydrates Rust structures from SQL results (low level, isolated)
-
-Determine what SQL query you want to issue using your favorite SQL client (not to say `psql`). Once you know exactly the SQL query you need, put it as a test for the `SqlDefinition` you will create. This SQL definition will be split in two responsibilities:
- * the projection (the `SELECT` part) that is required to build the Rust structure that will hold the data
- * the conditions (the `WHERE` part) that can vary using the same SQL query to represent different data contexts
-
-The same query can be used to hydrate several kinds of Rust structures. The same query for the same structure can be used with different set of conditions.
-
-As an example, we can imagine the list of objects for sale. There are 3 different views of those objects: private view with full details and price, public with less details and small for compact lists. The query remains the same: get the list of objects that are still for sale and on display but the projection of the query changes.
-
-### Writing a data book (data repository)
-
-```rust
-struct WhateverEntityDataBook<'client> {
-    provider: Provider<'client, WhateverEntity>,
+ ```rust
+struct CompanyQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
 }
 
-impl<'client> WhateverEntityDataBook<'client> {
-    pub fn new(provider: Provider<'client, WhateverEntity>) -> Self {
-        Self { provider }
+impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.company" // fully qualified name of the table
+    }
+}
+
+impl<T: SqlEntity> CompanyQueryBook<T> {
+   pub fn new() -> Self {
+      Self {
+          _phantom: PhantomData,
+      }
+   }
+
+   pub fn get_by_id<'a>(&self, id: &'a Uuid) -> SqlQuery<'a, T> {
+      self.select(WhereCondition::new("company_id = $?", vec![id]))
+   }
+
+   // This method could be brung by the `ReadQueryBook` trait, it is implemented
+   // here for the sake of showing the internals.
+   pub fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T>
+      let mut query = SqlQuery::new("select {:projection:} from {:source:} where {:condition:}");
+      let (conditions, parameters) = conditions.expand();
+      query
+         .set_variable("projection", &T::get_projection().expand())
+         .set_variable("source", self.get_sql_source())
+         .set_variable("condition", &conditions.to_string())
+         .set_parameters(parameters);
+
+      query
+   }
+}
+ ```
+
+The main idea behinq query books is to manipulate a SQL query template where the
+projection and the conditions are dynamically expanded.
+
+Since pretty much of the `SELECT`, `INSERT` or `UPDATE` sql statements used in development are simple queries they can be implemented as trait but it makes Agrum able to hold complex queries (see below).
+
+## Conditions
+
+Conditions designate the `where` part of SQL queries. It is handled by the
+`WhereCondition` structure that holds the different SQL conditions and their
+associated parameters.
+ 
+```rust
+let condition = WhereCondition::new("stuff_id=$?", vec![&1_u32])
+   .and_where(WhereCondition::where_in("substuff_id", vec![&20_u32, &23, &42]).or_where(WhereCondition::new("is_alone", vec![])));
+// will expand to `stuff_id=$1 and (substuff_id in ($2, $3, $4) or is_alone)`
+```
+
+## SQL Entities
+
+SQL entities are entities returned by the queries. This means they are tied to a particular projection. The entities associated with the Query Book presented above is the following:
+
+```rust
+pub struct Company {
+    pub company_id: Uuid,
+    pub name: String,
+    pub default_address_id: Uuid,
+}
+
+impl SqlEntity for Company {
+    fn get_projection() -> Projection<Company> {
+        Projection::default()
     }
 
-    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error + Sync + Send>> {
-        self.provider.fetch(WhereCondition::default()).await
+    fn hydrate(row: &Row) -> Result<Self, HydrationError> {
+        Ok(Self {
+            company_id: row.get("company_id"),
+            name: row.get("name"),
+            default_address_id: row.get("default_address_id"),
+        })
     }
+}
 
-    pub async fn fetch_by_id(
-        &self,
-        thing_id: i32,
-    ) -> Result<Option<WhateverEntity>, Box<dyn Error + Sync + Send>> {
-        let condition = WhereCondition::new("thing_id = $?", params![thing_id]);
-        let entity = self.provider.fetch(condition).await?.pop();
-
-        Ok(entity)
+impl Structured for Company {
+    fn get_structure() -> Structure {
+        Structure::new(&[
+            ("company_id", "uuid"),
+            ("name", "text"),
+            ("default_address_id", "uuid"),
+        ])
     }
 }
 ```
 
-### Writing a SQL definition 
+Ideally, the goal would be something as simple as:
 
-
+```rust
+#[derive(SqlEntity)]
+pub struct Company {
+    pub company_id: Uuid,
+    pub name: String,
+    pub default_address_id: Uuid,
+}
+```

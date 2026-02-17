@@ -1,4 +1,4 @@
-use std::{marker::PhantomData};
+use std::marker::PhantomData;
 
 use super::{SqlEntity, Structure};
 
@@ -89,14 +89,11 @@ where
 
     /// Return the projection SQL definition to be used in queries.
     pub fn expand(&self) -> String {
-        let projection = self
-            .fields
+        self.fields
             .iter()
             .map(|def| def.expand())
             .collect::<Vec<String>>()
-            .join(", ");
-    
-        projection
+            .join(", ")
     }
 
     /// Return the field names list.
@@ -150,22 +147,16 @@ mod tests {
         }
 
         fn get_projection() -> Projection<TestSqlEntity> {
-            let projection =
-                Projection::<TestSqlEntity>::default();
-
-            projection
+            Projection::<TestSqlEntity>::default()
         }
     }
 
     #[test]
     fn test_expand() {
-
         let projection = TestSqlEntity::get_projection();
 
         assert_eq!(
-            String::from(
-                "test_id as test_id, something as something, is_what as is_what"
-            ),
+            String::from("test_id as test_id, something as something, is_what as is_what"),
             projection.expand()
         );
     }
