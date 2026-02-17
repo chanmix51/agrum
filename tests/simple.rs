@@ -1,175 +1,191 @@
-mod utils;
+use std::{any::Any, env, marker::PhantomData};
 
-use utils::get_config;
+use agrum::{QueryBook, ReadQueryBook, Result, SqlEntity, SqlQuery, Structured, ToSqlAny, Transaction, WhereCondition};
+use bb8::Pool;
+use bb8_postgres::PostgresConnectionManager;
+use uuid::Uuid;
+use tokio_postgres::{NoTls};
 
-use std::error::Error;
+mod model;
 
-use agrum::{
-    core::{
-        HydrationError, Projection, Provider, ProviderBuilder, SourceAliases, SqlDefinition,
-        SqlEntity, Structure, Structured, WhereCondition,
-    },
-    params,
-};
-use tokio_postgres::{Client, NoTls, Row};
+use model::{Address, Company};
 
-/// Entity that will be hydrated from query results.
-#[derive(Debug, Clone, PartialEq)]
-pub struct WhateverEntity {
-    entity_id: i32,
-    content: String,
-    has_thing: bool,
-    something: Option<i32>,
+use crate::model::Contact;
+
+struct AddressQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
 }
 
-/// Database representation of this entity.
-impl Structured for WhateverEntity {
-    fn get_structure() -> Structure {
-        Structure::new(&[
-            ("thing_id", "int"),
-            ("content", "text"),
-            ("has_thing", "bool"),
-            ("maybe", "int"),
-        ])
+impl<T: SqlEntity> QueryBook<T> for AddressQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.address"
     }
 }
 
-/// How to create instances from query results.
-impl SqlEntity for WhateverEntity {
-    fn hydrate(row: Row) -> Result<Self, HydrationError>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            entity_id: row.get("thing_id"),
-            content: row.get("content"),
-            has_thing: row.get("has_thing"),
-            something: row.get("maybe"),
-        })
-    }
-}
+impl<T: SqlEntity> ReadQueryBook<T> for AddressQueryBook<T> {}
 
-/// A simple query that maps the table to the entity.
-/// It uses a managed projection that pops out [WhateverEntity] instances.
-struct WhateverSqlDefinition {
-    projection: Projection<WhateverEntity>,
-    source_aliases: SourceAliases,
-}
-
-impl WhateverSqlDefinition {
-    /// Constructor
-    pub fn new(projection: Projection<WhateverEntity>) -> Self {
+impl<T: SqlEntity> AddressQueryBook<T> {
+    pub fn new() -> Self {
         Self {
-            projection,
-            source_aliases: SourceAliases::new(&[("thing", "whatever")]),
+            _phantom: PhantomData,
         }
     }
-}
 
-impl SqlDefinition for WhateverSqlDefinition {
-    fn expand(&self, condition: &str) -> String {
-        let projection = self.projection.expand(&self.source_aliases);
-
-        format!(
-            r#"
-select {projection}
-from (values (1, 'whatever', true, null), (2, 'something else', false, 1)) whatever (thing_id, content, has_thing, maybe)
-where {condition}"#
-        )
+    pub fn get_all<'a>(&'a self) -> SqlQuery<'a, T> {
+        self.select(WhereCondition::default())
     }
 }
 
-/// Repositories are a good place to perform several queries through several
-/// providers. It manages conditions and transactions.
-struct WhateverDataBook<'client> {
-    provider: Provider<'client, WhateverEntity>,
+struct CompanyQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
 }
 
-impl<'client> WhateverDataBook<'client> {
-    pub fn new(provider: Provider<'client, WhateverEntity>) -> Self {
-        Self { provider }
-    }
-
-    pub async fn fetch_all(&self) -> Result<Vec<WhateverEntity>, Box<dyn Error + Sync + Send>> {
-        self.provider.fetch(WhereCondition::default()).await
-    }
-
-    pub async fn fetch_by_id(
-        &self,
-        thing_id: i32,
-    ) -> Result<Option<WhateverEntity>, Box<dyn Error + Sync + Send>> {
-        let condition = WhereCondition::new("thing_id = $?", params![thing_id]);
-        let entity = self.provider.fetch(condition).await?.pop();
-
-        Ok(entity)
+impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.company"
     }
 }
 
-/// This function is used by different test cases; it creates a connection and return a client.
-async fn get_client() -> Client {
-    let config = get_config(vec![]).unwrap();
-    let (client, connection) = tokio_postgres::connect(&config, NoTls).await.unwrap();
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+impl<T: SqlEntity> ReadQueryBook<T> for CompanyQueryBook<T> {}
+
+impl<T: SqlEntity> CompanyQueryBook<T> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
         }
-    });
+    }
 
-    client
+    pub fn get_from_id<'a>(&self, id: &'a Uuid) -> SqlQuery<'a, T> {
+        self.select(WhereCondition::new("company_id = $?", vec![id as &dyn ToSqlAny]))
+    }
+}
+
+#[derive(Default)]
+struct ContactQueryBook;
+
+
+impl QueryBook<Contact> for ContactQueryBook {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.contact"
+    }
+}
+
+impl ContactQueryBook {
+    pub fn insert<'a>(&self, contact: &'a Contact) -> SqlQuery<'a, Contact> {
+        let sql = r#"insert into {:source:} ({:structure:})
+  values ($1, $2, $3, $4, $5)
+  returning {:projection:}"#;
+        let mut query = SqlQuery::new(sql);
+        query.add_parameter(&contact.contact_id)
+            .add_parameter(&contact.name)
+            .add_parameter(&contact.email)
+            .add_parameter(&contact.phone_number)
+            .add_parameter(&contact.company_id)
+            .set_variable("source", &self.get_sql_source())
+            .set_variable("structure", &Contact::get_structure().get_names().join(", "));
+        query
+    }
 }
 
 #[tokio::test]
-async fn provider_no_filter() {
-    // This example uses the provider builder to create the internal provider used by the
-    // repository. Types are implied by the definitions.
-    let provider_builder = ProviderBuilder::new(get_client().await);
-    let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
-    let repository = WhateverDataBook::new(provider_builder.build_provider(sql_definition));
+async fn test_controller() {
+    // Load .env if present; existing env vars override .env values
+    let _ = dotenvy::dotenv();
 
-    // The connection object performs the actual communication with the database,
-    // so spawn it off to run on its own.
-    let entities = repository.fetch_all().await.unwrap();
+    let pg_dsn = env::var("PG_DSN").ok().filter(|s| !s.is_empty());
+    if pg_dsn.is_none() {
+        eprintln!("Skipping database tests: PG_DSN is not set (set it in the environment or in a .env file)");
+        return;
+    }
+    let pg_mgr =
+        PostgresConnectionManager::new_from_stringlike(pg_dsn.unwrap(), tokio_postgres::NoTls).unwrap();
+    let pool = Pool::builder().build(pg_mgr).await.unwrap();
 
-    assert_eq!(
-        vec![
-            WhateverEntity {
-                entity_id: 1,
-                content: "whatever".to_string(),
-                has_thing: true,
-                something: None,
-            },
-            WhateverEntity {
-                entity_id: 2,
-                content: "something else".to_string(),
-                has_thing: false,
-                something: Some(1),
-            },
-        ],
-        entities
-    );
+    let _ = test_address_query_book(&pool).await;
+    let _ = test_condition_company_id(&pool).await;
+    let _ = test_insert_contact(&pool).await;
 }
 
-#[tokio::test]
-async fn provider_with_filter() {
-    // In this example, the provider is used directly in the code without the provider_builder.
-    let client = get_client().await;
-    let sql_definition = Box::new(WhateverSqlDefinition::new(Projection::default()));
-    let provider = Provider::new(&client, sql_definition);
-    let repository = WhateverDataBook::new(provider);
+async fn test_address_query_book(pool: &Pool<PostgresConnectionManager<NoTls>>) {
+    let mut connection = pool.get().await.unwrap();
 
-    let entity = repository
-        .fetch_by_id(1)
-        .await
-        .unwrap()
-        .expect("there should be a thing with ID=1");
+    let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+    let query_book = AddressQueryBook::<Address>::new();
+    let query = query_book.get_all();
+    let results = transaction.query(query).await.unwrap();
+    let results = results.collect::<Vec<_>>().await;
 
-    assert_eq!(
-        WhateverEntity {
-            entity_id: 1,
-            content: "whatever".to_string(),
-            has_thing: true,
-            something: None,
-        },
-        entity
-    );
+    assert_eq!(results.len(), 2);
+    let address = results[0].as_ref().unwrap();
+
+    assert_eq!(address.address_id, Uuid::parse_str("ffb3ef0e-697d-4fba-bc4f-28317dc44626").unwrap());
+    assert_eq!(address.label, "FIRST HQ");
+    assert_eq!(address.company_id, Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap());
+    assert_eq!(address.content, "3 rue de la marche");
+    assert_eq!(address.zipcode, "57300");
+    assert_eq!(address.city, "Mouzillon-Sur-Moselle");
+    assert_eq!(address.associated_contact_id, Some(Uuid::parse_str("529fb920-6df7-4637-8f7f-0878ee140a0f").unwrap()));
+
+    let address = results[1].as_ref().unwrap();
+    assert_eq!(address.address_id, Uuid::parse_str("af18dfe3-b189-4d80-bbc9-a90792d92143").unwrap());
+    assert_eq!(address.label, "SECOND_HQ");
+    assert_eq!(address.company_id, Uuid::parse_str("dcce1188-66ad-48a1-bb41-756a48514ac4").unwrap());
+    assert_eq!(address.content, "1, place du carré vert");
+    assert_eq!(address.zipcode, "13820");
+    assert_eq!(address.city, "Mingon-En-Provence");
+    assert_eq!(address.associated_contact_id, Some(Uuid::parse_str("99c4996c-b5a7-42bf-af8a-2df326722566").unwrap()));
+}
+
+async fn test_condition_company_id(pool: &Pool<PostgresConnectionManager<NoTls>>) {
+    let mut connection = pool.get().await.unwrap();
+
+    let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+    let company_id = Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap();
+    let query = CompanyQueryBook::<Company>::new().get_from_id(&company_id);
+    let results = transaction.query(query).await.unwrap().collect::<Vec<_>>().await;
+    assert_eq!(results.len(), 1);
+
+    let company = results[0].as_ref().unwrap();
+    assert_eq!(company.company_id, Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap());
+    assert_eq!(company.name, "first");
+    assert_eq!(company.default_address_id, Uuid::parse_str("ffb3ef0e-697d-4fba-bc4f-28317dc44626").unwrap());
+}
+
+async fn test_insert_contact(pool: &Pool<PostgresConnectionManager<NoTls>>) {
+    let mut connection = pool.get().await.unwrap();
+    let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+
+    let company_id = Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap();
+    let query = CompanyQueryBook::<Company>::new().get_from_id(&company_id);
+    let results = transaction.query(query).await.unwrap().collect::<Vec<_>>().await;
+    let company = results[0].as_ref().unwrap();
+    let contact = Contact {
+        contact_id: Uuid::new_v4(),
+        name: "John Doe".to_string(),
+        email: Some("john.doe@example.com".to_string()),
+        phone_number: Some("1234567890".to_string()),
+        company_id: company.company_id.clone(),
+    };
+
+    let query = ContactQueryBook::default().insert(&contact);
+    assert_eq!(query.to_string(),r#"insert into pommr.contact (contact_id, name, email, phone_number, company_id)
+  values ($1, $2, $3, $4, $5)
+  returning contact_id as contact_id, name as name, email as email, phone_number as phone_number, company_id as company_id"#);
+    let parameters = query.get_parameters();
+    assert_eq!(parameters.len(), 5);
+    assert_eq!((parameters[0] as &dyn Any).downcast_ref::<Uuid>().unwrap(), &contact.contact_id);
+    assert_eq!((parameters[1] as &dyn Any).downcast_ref::<String>().unwrap(), &contact.name);
+    assert_eq!((parameters[2] as &dyn Any).downcast_ref::<Option<String>>().unwrap(), &contact.email);
+    assert_eq!((parameters[3] as &dyn Any).downcast_ref::<Option<String>>().unwrap(), &contact.phone_number);
+    assert_eq!((parameters[4] as &dyn Any).downcast_ref::<Uuid>().unwrap(), &contact.company_id);
+
+    let results = transaction.query(query).await.unwrap().collect::<Vec<_>>().await;
+    assert_eq!(results.len(), 1);
+
+    let contact = results[0].as_ref().unwrap();
+    assert_eq!(contact.name, "John Doe");
+    assert_eq!(contact.email, Some("john.doe@example.com".to_string()));
+    assert_eq!(contact.phone_number, Some("1234567890".to_string()));
+    assert_eq!(contact.company_id, company.company_id);
+    transaction.rollback().await.unwrap();
 }
