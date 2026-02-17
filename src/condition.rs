@@ -1,21 +1,21 @@
-use std::iter::repeat_n;
+use std::{fmt::Display, iter::repeat_n};
 
 use tokio_postgres::types::ToSql;
+
+pub trait ToSqlAny: ToSql + std::any::Any + Sync {}
+impl<T: ToSql + std::any::Any + Sync> ToSqlAny for T {}
 
 #[macro_export]
 macro_rules! params {
     ($( $x:expr ),*) => {
         {
-            use tokio_postgres::types::ToSql;
-            let mut params = Vec::new();
-            $(
-                params.push(&$x as &(dyn ToSql + Sync));
-            )*
+            let params = vec![$(&$x as &dyn $crate::ToSqlAny),*];
             params
         }
     };
 }
 
+#[derive(Debug, Clone)]
 enum BooleanCondition {
     None,
     Expression(String),
@@ -47,9 +47,10 @@ impl BooleanCondition {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct WhereCondition<'a> {
     condition: BooleanCondition,
-    parameters: Vec<&'a (dyn ToSql + Sync)>,
+    parameters: Vec<&'a dyn ToSqlAny>,
 }
 
 impl<'a> Default for WhereCondition<'a> {
@@ -61,15 +62,21 @@ impl<'a> Default for WhereCondition<'a> {
     }
 }
 
+impl Display for WhereCondition<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.condition.expand())
+    }
+}
+
 impl<'a> WhereCondition<'a> {
-    pub fn new(expression: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
+    pub fn new(expression: &str, parameters: Vec<&'a dyn ToSqlAny>) -> Self {
         Self {
             condition: BooleanCondition::Expression(expression.to_string()),
             parameters,
         }
     }
 
-    pub fn expand(self) -> (String, Vec<&'a (dyn ToSql + Sync)>) {
+    pub fn expand(self) -> (String, Vec<&'a dyn ToSqlAny>) {
         let mut expression = self.condition.expand();
         let parameters = self.parameters;
         let mut param_index = 1;
@@ -86,7 +93,7 @@ impl<'a> WhereCondition<'a> {
         (expression, parameters)
     }
 
-    pub fn where_in(field: &str, parameters: Vec<&'a (dyn ToSql + Sync)>) -> Self {
+    pub fn where_in(field: &str, parameters: Vec<&'a dyn ToSqlAny>) -> Self {
         let params: Vec<&str> = repeat_n("$?", parameters.len()).collect();
         let expression = format!("{} in ({})", field, params.join(", "));
 
@@ -341,5 +348,13 @@ mod tests {
 
         assert_eq!("a = $1", &sql);
         assert_eq!(1, params.len());
+    }
+
+    #[test]
+    fn test_to_string() {
+        let expression = WhereCondition::new("a = $?", params![1_i32]);
+        let sql = expression.to_string();
+
+        assert_eq!("a = $?", &sql);
     }
 }

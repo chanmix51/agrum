@@ -1,38 +1,6 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
 
-use super::{SourcesCatalog, SqlEntity, Structure};
-
-#[derive(Debug, Default)]
-pub struct SourceAliases {
-    aliases: HashMap<String, String>,
-}
-
-impl SourceAliases {
-    pub fn new(alias_def: &[(&str, &str)]) -> Self {
-        let mut aliases: HashMap<String, String> = HashMap::new();
-
-        for (name, alias) in alias_def {
-            aliases.insert(name.to_string(), alias.to_string());
-        }
-
-        Self { aliases }
-    }
-
-    /// This method easily create a SourceAlias from a [SourcesCatalog].
-    /// source alias will be the same as their source name.
-    pub fn from_sources_catalog(catalog: &SourcesCatalog) -> Self {
-        let source_alias: Vec<(&str, &str)> = catalog
-            .iter()
-            .map(|(name, _source)| (name.as_str(), name.as_str()))
-            .collect();
-
-        SourceAliases::new(&source_alias)
-    }
-
-    pub fn get_aliases(&self) -> &HashMap<String, String> {
-        &self.aliases
-    }
-}
+use super::{SqlEntity, Structure};
 
 /// Definition of a projection field.
 #[derive(Debug, Clone)]
@@ -120,20 +88,12 @@ where
     }
 
     /// Return the projection SQL definition to be used in queries.
-    pub fn expand(&self, source_aliases: &SourceAliases) -> String {
-        let projection = self
-            .fields
+    pub fn expand(&self) -> String {
+        self.fields
             .iter()
             .map(|def| def.expand())
             .collect::<Vec<String>>()
-            .join(", ");
-
-        source_aliases
-            .get_aliases()
-            .iter()
-            .fold(projection, |projection, (name, alias)| {
-                projection.replace(&format!("{{:{name}:}}"), alias)
-            })
+            .join(", ")
     }
 
     /// Return the field names list.
@@ -149,7 +109,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::core::Structured;
+    use tokio_postgres::Row;
+
+    use crate::Structured;
 
     use super::*;
 
@@ -171,7 +133,7 @@ mod tests {
     }
 
     impl SqlEntity for TestSqlEntity {
-        fn hydrate(row: tokio_postgres::Row) -> Result<Self, crate::core::HydrationError>
+        fn hydrate(row: &Row) -> Result<Self, crate::HydrationError>
         where
             Self: Sized,
         {
@@ -183,32 +145,26 @@ mod tests {
 
             Ok(entity)
         }
-    }
 
-    fn get_projection() -> Projection<TestSqlEntity> {
-        let projection =
-            Projection::<TestSqlEntity>::default().set_definition("test_id", "{:alias:}.test_id");
-
-        projection
+        fn get_projection() -> Projection<TestSqlEntity> {
+            Projection::<TestSqlEntity>::default()
+        }
     }
 
     #[test]
     fn test_expand() {
-        let projection = get_projection();
-        let source_aliases = SourceAliases::new(&[("alias", "test_alias")]);
+        let projection = TestSqlEntity::get_projection();
 
         assert_eq!(
-            String::from(
-                "test_alias.test_id as test_id, something as something, is_what as is_what"
-            ),
-            projection.expand(&source_aliases)
+            String::from("test_id as test_id, something as something, is_what as is_what"),
+            projection.expand()
         );
     }
 
     #[test]
     #[should_panic]
     fn test_unexistent_field() {
-        let _projection = get_projection()
+        let _projection = TestSqlEntity::get_projection()
             .set_definition("how_old", "age({:alias:}.born_at)")
             .set_definition("test_id", "{:alias:}.is_ok");
     }
@@ -216,12 +172,11 @@ mod tests {
     #[test]
     fn redefine_field() {
         let projection =
-            get_projection().set_definition("something", "initcap({:alias:}.something)");
-        let source_aliases = SourceAliases::new(&[("alias", "test_alias")]);
+            TestSqlEntity::get_projection().set_definition("something", "initcap(something)");
 
         assert_eq!(
-            String::from("test_alias.test_id as test_id, initcap(test_alias.something) as something, is_what as is_what"),
-            projection.expand(&source_aliases)
+            String::from("test_id as test_id, initcap(something) as something, is_what as is_what"),
+            projection.expand()
         );
     }
 }

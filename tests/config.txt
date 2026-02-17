@@ -1,1 +1,0 @@
-host=postgres.lxc user=greg application_name=agrum_test

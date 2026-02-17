@@ -5,6 +5,9 @@ release:
 	cargo build --release
 
 test: check
+	cargo test -- --include-ignored
+
+test-ci: check
 	cargo test
 
 check:
