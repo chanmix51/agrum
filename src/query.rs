@@ -14,7 +14,7 @@ impl<'a, T: SqlEntity> SqlQuery<'a, T> {
         Self {
             query: query.to_string(),
             parameters: Vec::new(),
-            variables: [("projection", T::get_projection().expand())].into(),
+            variables: [("projection", T::get_projection().to_string())].into(),
             _phantom: PhantomData,
         }
     }
@@ -86,7 +86,7 @@ pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
         query
-            .set_variable("projection", &T::get_projection().expand())
+            .set_variable("projection", &T::get_projection().to_string())
             .set_variable("source", self.get_sql_source())
             .set_variable("condition", &conditions.to_string())
             .set_parameters(parameters);
@@ -135,7 +135,7 @@ mod tests {
                 "SELECT {:projection:} FROM my_table WHERE {:condition:}",
             );
             query
-                .set_variable("projection", &TestSqlEntity::get_projection().expand())
+                .set_variable("projection", &TestSqlEntity::get_projection().to_string())
                 .set_variable("condition", "1 = $1")
                 .add_parameter(&1_i32);
             query

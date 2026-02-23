@@ -1,11 +1,12 @@
-use std::marker::PhantomData;
+use std::{fmt::Display, marker::PhantomData};
 
 use super::{SqlEntity, Structure};
 
 /// Definition of a projection field.
 #[derive(Debug, Clone)]
 pub struct ProjectionFieldDefinition {
-    /// SQL definition of the field, usally a field name but can be any SQL operation of function.
+    /// SQL definition of the field, usally a field name but can be any SQL
+    /// operation of function.
     definition: String,
 
     /// Output field name
@@ -20,12 +21,13 @@ impl ProjectionFieldDefinition {
             name: name.to_string(),
         }
     }
+}
 
-    /// Create the SQL definition of the projection.
-    pub fn expand(&self) -> String {
+impl Display for ProjectionFieldDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let definition = self.definition.clone();
 
-        format!("{} as {}", definition, self.name)
+        write!(f, "{} as {}", definition, self.name)
     }
 }
 
@@ -46,13 +48,27 @@ where
     T: SqlEntity,
 {
     fn default() -> Self {
+        Self::new("")
+    }
+}
+
+impl<T> Projection<T>
+where
+    T: SqlEntity,
+{
+    pub fn new(alias: &str) -> Self {
         let mut fields: Vec<ProjectionFieldDefinition> = Vec::new();
         let structure = T::get_structure();
 
         for def in structure.get_fields() {
             let (name, _type) = def.dump();
+            let aliased = if !alias.is_empty() {
+                format!("{alias}.{name}")
+            } else {
+                name.to_owned()
+            };
             fields.push(ProjectionFieldDefinition {
-                definition: name.to_owned(),
+                definition: aliased,
                 name: name.to_owned(),
             });
         }
@@ -63,12 +79,7 @@ where
             _phantom: PhantomData,
         }
     }
-}
 
-impl<T> Projection<T>
-where
-    T: SqlEntity,
-{
     /// Replace a field definition. It panics if the field is not declared.
     pub fn set_definition(mut self, name: &str, definition: &str) -> Self {
         let definition = ProjectionFieldDefinition::new(definition, name);
@@ -88,10 +99,10 @@ where
     }
 
     /// Return the projection SQL definition to be used in queries.
-    pub fn expand(&self) -> String {
+    fn expand(&self) -> String {
         self.fields
             .iter()
-            .map(|def| def.expand())
+            .map(|def| def.to_string())
             .collect::<Vec<String>>()
             .join(", ")
     }
@@ -104,6 +115,12 @@ where
     /// Return the underlying structure.
     pub fn get_structure(&self) -> &Structure {
         &self.structure
+    }
+}
+
+impl<T: SqlEntity> Display for Projection<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.expand())
     }
 }
 

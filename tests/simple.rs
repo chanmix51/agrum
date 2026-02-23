@@ -1,9 +1,6 @@
-use std::{any::Any, env, marker::PhantomData};
+use std::{any::Any, marker::PhantomData};
 
-use bb8::Pool;
-use bb8_postgres::PostgresConnectionManager;
 use futures_util::stream::StreamExt;
-use tokio_postgres::NoTls;
 use uuid::Uuid;
 
 use agrum::{
@@ -12,6 +9,9 @@ use agrum::{
 
 mod model;
 use model::{Address, Company, Contact};
+
+mod pool;
+use pool::get_pool;
 
 /* ---------------------------------------------------------------------------
  * AddressQueryBook
@@ -103,19 +103,6 @@ impl ContactQueryBook {
 /* ---------------------------------------------------------------------------
  * Test functions
  * --------------------------------------------------------------------------- */
-
-async fn get_pool() -> Pool<PostgresConnectionManager<NoTls>> {
-    // Load .env if present; existing env vars override .env values
-    let _ = dotenvy::dotenv();
-    let pg_dsn = match env::var("PG_DSN").ok().filter(|s| !s.is_empty()) {
-        Some(dsn) => dsn,
-        None => panic!("PG_DSN is not set (set it in the environment or in a .env file)"),
-    };
-    let pg_mgr =
-        PostgresConnectionManager::new_from_stringlike(pg_dsn, tokio_postgres::NoTls).unwrap();
-
-    Pool::builder().build(pg_mgr).await.unwrap()
-}
 
 #[tokio::test]
 #[ignore = "skipping database tests"]
