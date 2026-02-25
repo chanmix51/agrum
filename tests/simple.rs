@@ -4,7 +4,8 @@ use futures_util::stream::StreamExt;
 use uuid::Uuid;
 
 use agrum::{
-    QueryBook, ReadQueryBook, SqlEntity, SqlQuery, Structured, Transaction, WhereCondition,
+    DeleteQueryBook, QueryBook, ReadQueryBook, SqlEntity, SqlQuery, Structured, Transaction,
+    WhereCondition,
 };
 
 mod model;
@@ -99,6 +100,8 @@ impl ContactQueryBook {
         query
     }
 }
+
+impl DeleteQueryBook<Contact> for ContactQueryBook {}
 
 /* ---------------------------------------------------------------------------
  * Test functions
@@ -253,6 +256,69 @@ async fn test_insert_contact() {
     assert_eq!(results.len(), 1);
 
     let contact = results[0].as_ref().unwrap();
+    assert_eq!(contact.name, "John Doe");
+    assert_eq!(contact.email, Some("john.doe@example.com".to_string()));
+    assert_eq!(contact.phone_number, Some("1234567890".to_string()));
+    assert_eq!(contact.company_id, company.company_id);
+    transaction.rollback().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "skipping database tests"]
+async fn test_delete_contact() {
+    let pool = get_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+    let company_id = Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap();
+    let query = CompanyQueryBook::<Company>::new().get_from_id(&company_id);
+    let company = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .collect::<Vec<_>>()
+        .await
+        .pop()
+        .transpose()
+        .unwrap()
+        .unwrap();
+    let contact = Contact {
+        contact_id: Uuid::new_v4(),
+        name: "John Doe".to_string(),
+        email: Some("john.doe@example.com".to_string()),
+        phone_number: Some("1234567890".to_string()),
+        company_id: company.company_id,
+    };
+    let query = ContactQueryBook {}.insert(&contact);
+    let _ = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .collect::<Vec<_>>()
+        .await;
+
+    let query = ContactQueryBook {}.delete(WhereCondition::new(
+        "contact_id = $?",
+        vec![&contact.contact_id],
+    ));
+    assert_eq!(
+        query.to_string(),
+        r#"delete from pommr.contact where contact_id = $1 returning contact_id as contact_id, name as name, email as email, phone_number as phone_number, company_id as company_id"#
+    );
+    let parameters = query.get_parameters();
+    assert_eq!(parameters.len(), 1);
+    assert_eq!(
+        (parameters[0] as &dyn Any).downcast_ref::<Uuid>().unwrap(),
+        &contact.contact_id
+    );
+    let results = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(results.len(), 1);
+    let contact = results[0].as_ref().unwrap();
+    assert_eq!(contact.contact_id, contact.contact_id);
     assert_eq!(contact.name, "John Doe");
     assert_eq!(contact.email, Some("john.doe@example.com".to_string()));
     assert_eq!(contact.phone_number, Some("1234567890".to_string()));
