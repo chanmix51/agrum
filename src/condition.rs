@@ -77,18 +77,8 @@ impl<'a> WhereCondition<'a> {
     }
 
     pub fn expand(self) -> (String, Vec<&'a dyn ToSqlAny>) {
-        let mut expression = self.condition.expand();
+        let expression = self.condition.expand();
         let parameters = self.parameters;
-        let mut param_index = 1;
-        //
-        // Replace parameters placeholders by numerated parameters.
-        loop {
-            if !expression.contains("$?") {
-                break;
-            }
-            expression = expression.replacen("$?", &format!("${param_index}"), 1);
-            param_index += 1;
-        }
 
         (expression, parameters)
     }
@@ -303,7 +293,7 @@ mod tests {
         let expression = WhereCondition::new("A > $?::pg_type", params![0_i32]);
         let (sql, params) = expression.expand();
 
-        assert_eq!("A > $1::pg_type", &sql);
+        assert_eq!("A > $?::pg_type", &sql);
         assert_eq!(1, params.len());
     }
 
@@ -313,7 +303,7 @@ mod tests {
             .and_where(WhereCondition::new("B = $?", params![1_i32]));
         let (sql, params) = expression.expand();
 
-        assert_eq!("A > $1::pg_type and B = $2", &sql);
+        assert_eq!("A > $?::pg_type and B = $?", &sql);
         assert_eq!(2, params.len());
     }
 
@@ -322,7 +312,7 @@ mod tests {
         let expression = WhereCondition::where_in("A", params![0_i32, 1_i32]);
         let (sql, params) = expression.expand();
 
-        assert_eq!("A in ($1, $2)".to_string(), sql);
+        assert_eq!("A in ($?, $?)".to_string(), sql);
         assert_eq!(2, params.len());
     }
 
@@ -337,7 +327,7 @@ mod tests {
 
         let (sql, params) = expression.expand();
 
-        assert_eq!("(A > $1::pg_type or B) and C in ($2, $3, $4)", &sql);
+        assert_eq!("(A > $?::pg_type or B) and C in ($?, $?, $?)", &sql);
         assert_eq!(4, params.len());
     }
 
@@ -346,7 +336,7 @@ mod tests {
         let expression = WhereCondition::new("a = $?", params!["whatever"]);
         let (sql, params) = expression.expand();
 
-        assert_eq!("a = $1", &sql);
+        assert_eq!("a = $?", &sql);
         assert_eq!(1, params.len());
     }
 

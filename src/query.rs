@@ -33,6 +33,12 @@ impl<'a, T: SqlEntity> SqlQuery<'a, T> {
         self
     }
 
+    /// Append a vec of parameters to the query.
+    pub fn append_parameters(&mut self, parameters: Vec<&'a dyn ToSqlAny>) -> &mut Self {
+        self.parameters.extend(parameters);
+        self
+    }
+
     /// Set the parameters of the query.
     pub fn set_parameters(&mut self, parameters: Vec<&'a dyn ToSqlAny>) -> &mut Self {
         self.parameters = parameters;
@@ -65,6 +71,17 @@ impl<'a, T: SqlEntity> Display for SqlQuery<'a, T> {
         for (name, value) in &self.variables {
             query = query.replace(&format!("{{:{name}:}}"), value);
         }
+        let mut param_index = 1;
+        //
+        // Replace parameters placeholders by numerated parameters.
+        loop {
+            if !query.contains("$?") {
+                break;
+            }
+            query = query.replacen("$?", &format!("${param_index}"), 1);
+            param_index += 1;
+        }
+
         write!(f, "{}", query)
     }
 }
@@ -74,7 +91,7 @@ mod tests {
     use std::any::Any;
     use tokio_postgres::Row;
 
-    use crate::{HydrationError, Projection, SqlEntity, Structure, Structured};
+    use crate::{HydrationError, Projection, SqlEntity, Structure, Structured, params};
 
     use super::*;
 
@@ -104,21 +121,82 @@ mod tests {
     }
 
     #[test]
+    fn test_set_variable() {
+        let mut query = SqlQuery::<TestSqlEntity>::new("one: {:one:}; two: {:two:}");
+        query.set_variable("one", "ein");
+        query.set_variable("two", "zwei");
+        let (query, _parameters) = query.expand();
+        assert_eq!(query, "one: ein; two: zwei");
+    }
+
+    #[test]
+    fn test_add_parameter() {
+        let mut query = SqlQuery::<TestSqlEntity>::new("whatever");
+        let parameters = query.get_parameters();
+        assert_eq!(parameters.len(), 0);
+
+        query.add_parameter(&1_i32);
+        let parameters = query.get_parameters();
+        assert_eq!(parameters.len(), 1);
+        let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_i32);
+
+        query.add_parameter(&true);
+        let parameters = query.get_parameters();
+        assert_eq!(parameters.len(), 2);
+        let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_i32);
+        let parameter: &bool = (parameters[1] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &true);
+    }
+
+    #[test]
+    fn test_append_parameters() {
+        let mut query = SqlQuery::<TestSqlEntity>::new("whatever");
+        query
+            .add_parameter(&1_i32)
+            .append_parameters(params![2_i32, true]);
+        let parameters = query.get_parameters();
+        println!("parameters: {:?}", parameters);
+        assert_eq!(parameters.len(), 3);
+        let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_i32);
+        let parameter: &i32 = (parameters[1] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &2_i32);
+        let parameter: &bool = (parameters[2] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &true);
+    }
+
+    #[test]
+    fn test_set_parameters() {
+        let mut query = SqlQuery::<TestSqlEntity>::new("whatever");
+        query.set_parameters(params![1_i32, 2_i32, true]);
+        let parameters = query.get_parameters();
+        assert_eq!(parameters.len(), 3);
+        let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_i32);
+        let parameter: &i32 = (parameters[1] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &2_i32);
+        let parameter: &bool = (parameters[2] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &true);
+    }
+
+    #[test]
     fn test_to_string() {
         let query = {
             let mut query = SqlQuery::<TestSqlEntity>::new(
-                "SELECT {:projection:} FROM my_table WHERE {:condition:}",
+                "projection: {:projection:} condition: {:condition:}",
             );
             query
                 .set_variable("projection", &TestSqlEntity::get_projection().to_string())
-                .set_variable("condition", "1 = $1")
-                .add_parameter(&1_i32);
+                .set_variable("condition", "1 = $?")
+                .set_parameters(params![1_i32]);
             query
         };
         let parameters = query.get_parameters();
         let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
         let variables = query.get_variables();
-        assert_eq!(variables["condition"], "1 = $1");
+        assert_eq!(variables["condition"], "1 = $?");
         assert_eq!(parameters.len(), 1);
         assert_eq!(parameter, &1_i32);
         assert_eq!(variables.len(), 2);
@@ -126,7 +204,22 @@ mod tests {
         let result = query.to_string();
         assert_eq!(
             &result,
-            "SELECT id as id, name as name FROM my_table WHERE 1 = $1"
+            "projection: id as id, name as name condition: 1 = $1"
         );
+    }
+
+    #[test]
+    fn test_to_string_with_multiple_parameters() {
+        let mut query = SqlQuery::<TestSqlEntity>::new("VALUES ($?, $?, $?)");
+        query.set_parameters(params![1_i32, 2_i32, 3_i32]);
+        let (query, parameters) = query.expand();
+        assert_eq!(query, "VALUES ($1, $2, $3)");
+        assert_eq!(parameters.len(), 3);
+        let parameter: &i32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_i32);
+        let parameter: &i32 = (parameters[1] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &2_i32);
+        let parameter: &i32 = (parameters[2] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &3_i32);
     }
 }
