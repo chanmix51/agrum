@@ -41,7 +41,7 @@ impl<T: SqlEntity> AddressQueryBook<T> {
         }
     }
 
-    pub fn get_all<'a>(&'a self) -> SqlQuery<'a, T> {
+    pub fn get_all<'a>(&self) -> SqlQuery<'a, T> {
         self.select(WhereCondition::default())
     }
 }
@@ -116,8 +116,7 @@ async fn test_address_query_book() {
     let mut connection = pool.get().await.unwrap();
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
 
-    let query_book = AddressQueryBook::<Address>::new();
-    let query = query_book.get_all();
+    let query: SqlQuery<'_, Address> = AddressQueryBook::<Address>::new().get_all();
     let results = transaction
         .query(query)
         .await
@@ -270,8 +269,7 @@ async fn test_scenario_create_contact() {
         .unwrap()
         .unwrap();
 
-    let address_query_book = AddressQueryBook::<Address>::new();
-    let query = address_query_book.update(
+    let query = AddressQueryBook::<Address>::new().update(
         HashMap::from([(
             "associated_contact_id",
             &contact.contact_id as &dyn ToSqlAny,

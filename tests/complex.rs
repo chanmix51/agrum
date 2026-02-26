@@ -7,9 +7,6 @@ use agrum::{
 use futures_util::stream::StreamExt;
 use uuid::Uuid;
 
-mod model;
-use crate::model::Contact;
-
 mod pool;
 use pool::get_pool;
 
@@ -93,14 +90,16 @@ impl<T: SqlEntity> CompanyShortQueryBook<T> {
     }
 
     fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
-        let contact_source = ContactQueryBook::<Contact>::default().get_sql_source();
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
         query
             .set_parameters(parameters)
             .set_variable("projection", &T::get_projection().to_string())
             .set_variable("source", self.get_sql_source())
-            .set_variable("contact_source", contact_source)
+            .set_variable(
+                "contact_source",
+                ContactQueryBook::<T>::default().get_sql_source(),
+            )
             .set_variable("condition", &conditions);
         query
     }
