@@ -170,11 +170,26 @@ mod tests {
         }
     }
 
+    impl ReadQueryBook<Entity> for EntityQueryBook {}
+
     impl UpdateQueryBook<Entity> for EntityQueryBook {}
 
     impl DeleteQueryBook<Entity> for EntityQueryBook {}
 
     impl InsertQueryBook<Entity> for EntityQueryBook {}
+
+    #[test]
+    fn test_select() {
+        let query = EntityQueryBook::default().select(WhereCondition::new("id = $?", vec![&1_u32]));
+        assert_eq!(
+            query.to_string(),
+            "select entity_table.id as id, entity_table.name as name, entity_table.score as score, entity_table.is_active as is_active from some_schema.entity_table where id = $1"
+        );
+        let parameters = query.get_parameters();
+        assert_eq!(parameters.len(), 1);
+        let parameter: &u32 = (parameters[0] as &dyn Any).downcast_ref().unwrap();
+        assert_eq!(parameter, &1_u32);
+    }
 
     #[test]
     fn test_update() {
