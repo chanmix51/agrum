@@ -9,14 +9,14 @@ use futures_core::Stream;
 use tokio_postgres::{RowStream, Transaction as TokioTransaction, types::ToSql};
 
 pub struct EntityStream<T: SqlEntity> {
-    stream: RowStream,
+    stream: Pin<Box<RowStream>>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: SqlEntity> EntityStream<T> {
     pub fn new(stream: RowStream) -> Self {
         Self {
-            stream,
+            stream: Box::pin(stream),
             _phantom: PhantomData,
         }
     }
@@ -26,7 +26,9 @@ impl<T: SqlEntity> Stream for EntityStream<T> {
     type Item = Result<T>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let stream = unsafe { self.map_unchecked_mut(|s| &mut s.stream) };
+        // Safe: we only project to the `stream` field and call as_mut() on Pin<Box<RowStream>>;
+        // we do not move or unpin any part of Self.
+        let stream = unsafe { self.get_unchecked_mut().stream.as_mut() };
 
         match stream.poll_next(cx) {
             Poll::Ready(Some(result)) => {

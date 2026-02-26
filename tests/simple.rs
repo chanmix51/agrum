@@ -160,15 +160,14 @@ async fn test_condition_company_id() {
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
     let company_id = Uuid::parse_str(COMPANY_1_ID).unwrap();
     let query = CompanyQueryBook::<Company>::new().get_from_id(&company_id);
-    let results = transaction
+    let company = transaction
         .query(query)
         .await
         .unwrap()
-        .collect::<Vec<_>>()
-        .await;
-    assert_eq!(results.len(), 1);
-
-    let company = results[0].as_ref().unwrap();
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(company.company_id, Uuid::parse_str(COMPANY_1_ID).unwrap());
     assert_eq!(company.name, "first");
     assert_eq!(
@@ -195,9 +194,14 @@ async fn test_scenario_create_company() {
         ("name", &"test_name" as &dyn ToSqlAny),
         ("default_address_id", &default_address_id),
     ]));
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    let company = results[0].as_ref().unwrap();
+    let company = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
 
     let address_query_book = AddressQueryBook::<Address>::new();
     let query = address_query_book.insert(HashMap::from([
@@ -207,17 +211,27 @@ async fn test_scenario_create_company() {
         ("city", &"test_city"),
         ("company_id", &company.company_id),
     ]));
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    let address = results[0].as_ref().unwrap();
+    let address = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
 
     let query = company_query_book.update(
         HashMap::from([("default_address_id", &address.address_id as &dyn ToSqlAny)]),
         WhereCondition::new("company_id = $?", vec![&company.company_id]),
     );
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    let company = results[0].as_ref().unwrap();
+    let company = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(company.default_address_id, address.address_id);
 
     // ↓ uncomment to commit the transaction and see the changes in the database
@@ -247,9 +261,14 @@ async fn test_scenario_create_contact() {
         ("phone_number", &"test_phone_number"),
         ("company_id", &company_id),
     ]));
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    let contact = results[0].as_ref().unwrap();
+    let contact = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
 
     let address_query_book = AddressQueryBook::<Address>::new();
     let query = address_query_book.update(
@@ -259,17 +278,27 @@ async fn test_scenario_create_contact() {
         )]),
         WhereCondition::new("address_id = $?", vec![&address_id as &dyn ToSqlAny]),
     );
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    let address = results[0].as_ref().unwrap();
+    let address = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(address.associated_contact_id, Some(contact.contact_id));
 
     let query = contact_query_book.delete(WhereCondition::new(
         "contact_id = $?",
         vec![&contact.contact_id],
     ));
-    let results = transaction.query(query).await.unwrap();
-    let results = results.collect::<Vec<_>>().await;
-    assert!(results[0].is_err());
+    let _result = transaction
+        .query(query)
+        .await
+        .unwrap()
+        .next()
+        .await
+        .unwrap()
+        .unwrap_err();
     transaction.rollback().await.unwrap();
 }

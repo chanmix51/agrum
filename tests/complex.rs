@@ -133,14 +133,14 @@ async fn test_select_by_id() {
   where company.company_id = $1
   group by company.company_id"#
     );
-    let mut results = transaction
+    let company_short = transaction
         .query(query)
         .await
         .unwrap()
-        .collect::<Vec<_>>()
-        .await;
-    assert_eq!(results.len(), 1);
-    let company_short = results.pop().transpose().unwrap().unwrap();
+        .next()
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(company_short.company_id, company_id);
     assert_eq!(company_short.name, "first");
     assert_eq!(company_short.contacts_nb, 1);

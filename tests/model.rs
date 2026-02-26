@@ -6,6 +6,8 @@ use agrum::{HydrationError, Projection, SqlEntity, Structure, Structured};
 use tokio_postgres::Row;
 use uuid::Uuid;
 
+#[allow(unused_variables, dead_code)]
+#[derive(Debug)]
 pub struct Company {
     pub company_id: Uuid,
     pub name: String,
@@ -40,6 +42,8 @@ impl Structured for Company {
 // Address (pommr.address)
 // ---------------------------------------------------------------------------
 
+#[allow(unused_variables, dead_code)]
+#[derive(Debug)]
 pub struct Address {
     pub address_id: Uuid,
     pub label: String,
@@ -86,6 +90,8 @@ impl Structured for Address {
 // Contact (pommr.contact)
 // ---------------------------------------------------------------------------
 
+#[allow(unused_variables, dead_code)]
+#[derive(Debug)]
 pub struct Contact {
     pub contact_id: Uuid,
     pub name: String,
