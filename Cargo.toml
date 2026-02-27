@@ -1,6 +1,6 @@
 [package]
 name = "agrum"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Grégoire HUBERT <hubert.greg@gmail.com>"]
 edition = "2024"
 readme = "README.md"
@@ -16,6 +16,7 @@ bb8 = "0.9.1"
 bb8-postgres = "0.9.0"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
+postgres-types = { version = "0.2.12", features = ["derive"] }
 tokio = { version = "1.49.0", features = ["macros", "parking_lot"] }
 tokio-postgres = { version = "0.7.16", features = ["array-impls", "with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
 uuid = { version = "1", features = ["v4"] }

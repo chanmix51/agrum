@@ -1,13 +1,27 @@
+#![allow(unused_variables, dead_code)]
 // ---------------------------------------------------------------------------
 // Company (pommr.company)
 // ---------------------------------------------------------------------------
 
-use agrum::{HydrationError, Projection, SqlEntity, Structure, Structured};
+use std::marker::PhantomData;
+
+use agrum::{
+    DeleteQueryBook, HydrationError, InsertQueryBook, Projection, QueryBook, ReadQueryBook,
+    SqlEntity, SqlQuery, Structure, Structured, UpdateQueryBook, WhereCondition,
+};
+use postgres_types::{FromSql, ToSql};
 use tokio_postgres::Row;
 use uuid::Uuid;
 
-#[allow(unused_variables, dead_code)]
-#[derive(Debug)]
+pub const COMPANY_1_ID: &str = "a7b5f2c8-8816-4c40-86bf-64e066a8db7a";
+pub const COMPANY_2_ID: &str = "dcce1188-66ad-48a1-bb41-756a48514ac4";
+pub const ADDRESS_1_ID: &str = "ffb3ef0e-697d-4fba-bc4f-28317dc44626";
+pub const ADDRESS_2_ID: &str = "af18dfe3-b189-4d80-bbc9-a90792d92143";
+pub const CONTACT_1_ID: &str = "529fb920-6df7-4637-8f7f-0878ee140a0f";
+pub const CONTACT_2_ID: &str = "99c4996c-b5a7-42bf-af8a-2df326722566";
+
+#[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "company")]
 pub struct Company {
     pub company_id: Uuid,
     pub name: String,
@@ -42,8 +56,8 @@ impl Structured for Company {
 // Address (pommr.address)
 // ---------------------------------------------------------------------------
 
-#[allow(unused_variables, dead_code)]
-#[derive(Debug)]
+#[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "address")]
 pub struct Address {
     pub address_id: Uuid,
     pub label: String,
@@ -90,8 +104,8 @@ impl Structured for Address {
 // Contact (pommr.contact)
 // ---------------------------------------------------------------------------
 
-#[allow(unused_variables, dead_code)]
-#[derive(Debug)]
+#[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "contact")]
 pub struct Contact {
     pub contact_id: Uuid,
     pub name: String,
@@ -127,3 +141,90 @@ impl Structured for Contact {
         ])
     }
 }
+
+/* ---------------------------------------------------------------------------
+ * AddressQueryBook
+ * --------------------------------------------------------------------------- */
+pub struct AddressQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T: SqlEntity> QueryBook<T> for AddressQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.address"
+    }
+}
+
+impl<T: SqlEntity> Default for AddressQueryBook<T> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: SqlEntity> AddressQueryBook<T> {
+    pub fn get_all<'a>(&self) -> SqlQuery<'a, T> {
+        self.select(WhereCondition::default())
+    }
+}
+
+impl<T: SqlEntity> ReadQueryBook<T> for AddressQueryBook<T> {}
+impl<T: SqlEntity> InsertQueryBook<T> for AddressQueryBook<T> {}
+impl<T: SqlEntity> UpdateQueryBook<T> for AddressQueryBook<T> {}
+
+/* ---------------------------------------------------------------------------
+ * CompanyQueryBook
+ * --------------------------------------------------------------------------- */
+pub struct CompanyQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.company"
+    }
+}
+
+impl<T: SqlEntity> Default for CompanyQueryBook<T> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: SqlEntity> CompanyQueryBook<T> {
+    pub fn get_from_id<'a>(&self, id: &'a Uuid) -> SqlQuery<'a, T> {
+        self.select(WhereCondition::new("company_id = $?", vec![id]))
+    }
+}
+
+impl<T: SqlEntity> ReadQueryBook<T> for CompanyQueryBook<T> {}
+impl<T: SqlEntity> UpdateQueryBook<T> for CompanyQueryBook<T> {}
+impl<T: SqlEntity> InsertQueryBook<T> for CompanyQueryBook<T> {}
+
+/* ---------------------------------------------------------------------------
+ * ContactQueryBook
+ * --------------------------------------------------------------------------- */
+pub struct ContactQueryBook<T: SqlEntity> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T: SqlEntity> Default for ContactQueryBook<T> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: SqlEntity> QueryBook<T> for ContactQueryBook<T> {
+    fn get_sql_source(&self) -> &'static str {
+        "pommr.contact"
+    }
+}
+
+impl<T: SqlEntity> InsertQueryBook<T> for ContactQueryBook<T> {}
+impl<T: SqlEntity> DeleteQueryBook<T> for ContactQueryBook<T> {}
+impl<T: SqlEntity> UpdateQueryBook<T> for ContactQueryBook<T> {}

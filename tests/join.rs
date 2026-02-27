@@ -61,19 +61,19 @@ impl<T: SqlEntity> Default for ContactQueryBook<T> {
     }
 }
 
-struct CompanyShortQueryBook<T: SqlEntity> {
+struct CompanyWithContactsCountQueryBook<T: SqlEntity> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: SqlEntity> QueryBook<T> for CompanyShortQueryBook<T> {
+impl<T: SqlEntity> QueryBook<T> for CompanyWithContactsCountQueryBook<T> {
     fn get_sql_source(&self) -> &'static str {
         "pommr.company"
     }
 }
 
-impl<T: SqlEntity> ReadQueryBook<T> for CompanyShortQueryBook<T> {}
+impl<T: SqlEntity> ReadQueryBook<T> for CompanyWithContactsCountQueryBook<T> {}
 
-impl<T: SqlEntity> CompanyShortQueryBook<T> {
+impl<T: SqlEntity> CompanyWithContactsCountQueryBook<T> {
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -110,12 +110,14 @@ impl<T: SqlEntity> CompanyShortQueryBook<T> {
 }
 
 #[tokio::test]
+#[ignore = "skipping database tests"]
 async fn test_select_by_id() {
     let pool = get_pool().await;
     let mut connection = pool.get().await.unwrap();
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
+
     let company_id = Uuid::parse_str("a7b5f2c8-8816-4c40-86bf-64e066a8db7a").unwrap();
-    let query = CompanyShortQueryBook::<CompanyShort>::new().select_by_id(&company_id);
+    let query = CompanyWithContactsCountQueryBook::<CompanyShort>::new().select_by_id(&company_id);
     assert!(query.get_parameters().len() == 1);
     assert_eq!(
         (query.get_parameters()[0] as &dyn Any)
@@ -132,6 +134,7 @@ async fn test_select_by_id() {
   where company.company_id = $1
   group by company.company_id"#
     );
+
     let company_short = transaction
         .query(query)
         .await

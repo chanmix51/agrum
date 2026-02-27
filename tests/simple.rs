@@ -1,109 +1,18 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 use futures_util::stream::StreamExt;
 use uuid::Uuid;
 
 use agrum::{
-    DeleteQueryBook, InsertQueryBook, QueryBook, ReadQueryBook, SqlEntity, SqlQuery, ToSqlAny,
-    Transaction, UpdateQueryBook, WhereCondition,
+    DeleteQueryBook, InsertQueryBook, SqlQuery, ToSqlAny, Transaction, UpdateQueryBook,
+    WhereCondition,
 };
 
 mod model;
-use model::{Address, Company, Contact};
+use model::*;
 
 mod pool;
 use pool::get_pool;
-
-const COMPANY_1_ID: &str = "a7b5f2c8-8816-4c40-86bf-64e066a8db7a";
-const COMPANY_2_ID: &str = "dcce1188-66ad-48a1-bb41-756a48514ac4";
-const ADDRESS_1_ID: &str = "ffb3ef0e-697d-4fba-bc4f-28317dc44626";
-const ADDRESS_2_ID: &str = "af18dfe3-b189-4d80-bbc9-a90792d92143";
-const CONTACT_1_ID: &str = "529fb920-6df7-4637-8f7f-0878ee140a0f";
-const CONTACT_2_ID: &str = "99c4996c-b5a7-42bf-af8a-2df326722566";
-
-/* ---------------------------------------------------------------------------
- * AddressQueryBook
- * --------------------------------------------------------------------------- */
-struct AddressQueryBook<T: SqlEntity> {
-    _phantom: PhantomData<T>,
-}
-
-impl<T: SqlEntity> QueryBook<T> for AddressQueryBook<T> {
-    fn get_sql_source(&self) -> &'static str {
-        "pommr.address"
-    }
-}
-
-impl<T: SqlEntity> AddressQueryBook<T> {
-    pub fn new() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn get_all<'a>(&self) -> SqlQuery<'a, T> {
-        self.select(WhereCondition::default())
-    }
-}
-
-impl<T: SqlEntity> ReadQueryBook<T> for AddressQueryBook<T> {}
-impl<T: SqlEntity> InsertQueryBook<T> for AddressQueryBook<T> {}
-impl<T: SqlEntity> UpdateQueryBook<T> for AddressQueryBook<T> {}
-
-/* ---------------------------------------------------------------------------
- * CompanyQueryBook
- * --------------------------------------------------------------------------- */
-struct CompanyQueryBook<T: SqlEntity> {
-    _phantom: PhantomData<T>,
-}
-
-impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
-    fn get_sql_source(&self) -> &'static str {
-        "pommr.company"
-    }
-}
-
-impl<T: SqlEntity> ReadQueryBook<T> for CompanyQueryBook<T> {}
-
-impl<T: SqlEntity> CompanyQueryBook<T> {
-    pub fn new() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn get_from_id<'a>(&self, id: &'a Uuid) -> SqlQuery<'a, T> {
-        self.select(WhereCondition::new("company_id = $?", vec![id]))
-    }
-}
-
-impl<T: SqlEntity> UpdateQueryBook<T> for CompanyQueryBook<T> {}
-impl<T: SqlEntity> InsertQueryBook<T> for CompanyQueryBook<T> {}
-
-/* ---------------------------------------------------------------------------
- * ContactQueryBook
- * --------------------------------------------------------------------------- */
-#[derive(Default)]
-struct ContactQueryBook<T: SqlEntity> {
-    _phantom: PhantomData<T>,
-}
-impl<T: SqlEntity> ContactQueryBook<T> {
-    pub fn new() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<T: SqlEntity> QueryBook<T> for ContactQueryBook<T> {
-    fn get_sql_source(&self) -> &'static str {
-        "pommr.contact"
-    }
-}
-
-impl<T: SqlEntity> InsertQueryBook<T> for ContactQueryBook<T> {}
-impl<T: SqlEntity> DeleteQueryBook<T> for ContactQueryBook<T> {}
-impl<T: SqlEntity> UpdateQueryBook<T> for ContactQueryBook<T> {}
 
 /* ---------------------------------------------------------------------------
  * Test functions
@@ -116,7 +25,7 @@ async fn test_address_query_book() {
     let mut connection = pool.get().await.unwrap();
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
 
-    let query: SqlQuery<'_, Address> = AddressQueryBook::<Address>::new().get_all();
+    let query: SqlQuery<'_, Address> = AddressQueryBook::<Address>::default().get_all();
     let results = transaction
         .query(query)
         .await
@@ -158,7 +67,7 @@ async fn test_condition_company_id() {
     let mut connection = pool.get().await.unwrap();
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
     let company_id = Uuid::parse_str(COMPANY_1_ID).unwrap();
-    let query = CompanyQueryBook::<Company>::new().get_from_id(&company_id);
+    let query = CompanyQueryBook::<Company>::default().get_from_id(&company_id);
     let company = transaction
         .query(query)
         .await
@@ -187,7 +96,7 @@ async fn test_scenario_create_company() {
     let mut connection = pool.get().await.unwrap();
     let transaction = Transaction::start(connection.transaction().await.unwrap()).await;
 
-    let company_query_book = CompanyQueryBook::<Company>::new();
+    let company_query_book = CompanyQueryBook::<Company>::default();
     let default_address_id = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
     let query = company_query_book.insert(HashMap::from([
         ("name", &"test_name" as &dyn ToSqlAny),
@@ -202,7 +111,7 @@ async fn test_scenario_create_company() {
         .unwrap()
         .unwrap();
 
-    let address_query_book = AddressQueryBook::<Address>::new();
+    let address_query_book = AddressQueryBook::<Address>::default();
     let query = address_query_book.insert(HashMap::from([
         ("label", &"test_label" as &dyn ToSqlAny),
         ("content", &"test_content"),
@@ -253,7 +162,7 @@ async fn test_scenario_create_contact() {
     let company_id = Uuid::parse_str(COMPANY_1_ID).unwrap();
     let address_id = Uuid::parse_str(ADDRESS_1_ID).unwrap();
 
-    let contact_query_book = ContactQueryBook::<Contact>::new();
+    let contact_query_book = ContactQueryBook::<Contact>::default();
     let query = contact_query_book.insert(HashMap::from([
         ("name", &"test_name" as &dyn ToSqlAny),
         ("email", &"test_email"),
@@ -269,7 +178,7 @@ async fn test_scenario_create_contact() {
         .unwrap()
         .unwrap();
 
-    let query = AddressQueryBook::<Address>::new().update(
+    let query = AddressQueryBook::<Address>::default().update(
         HashMap::from([(
             "associated_contact_id",
             &contact.contact_id as &dyn ToSqlAny,
