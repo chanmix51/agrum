@@ -2,6 +2,14 @@ use std::{collections::HashMap, fmt::Display, marker::PhantomData};
 
 use crate::{SqlEntity, ToSqlAny};
 
+/// A query builder.
+/// This is the main structure to build the SQL queries using a templating system.
+/// It is designed to be a composable structure to build the SQL queries
+/// alongside the according parameters.
+/// The query is built using the `set_variable` method to set the variables
+/// and the `add_parameter` method to add the parameters.
+/// The query is expanded using the `expand` method to get the SQL query and
+/// the parameters.
 pub struct SqlQuery<'a, T: SqlEntity> {
     query: String,
     parameters: Vec<&'a dyn ToSqlAny>,
@@ -10,6 +18,10 @@ pub struct SqlQuery<'a, T: SqlEntity> {
 }
 
 impl<'a, T: SqlEntity> SqlQuery<'a, T> {
+    /// Create a new query using the given string as a SQL template.
+    /// The template is a string with the variables enclosed in `{:variable:}`
+    /// placeholders.
+    /// The default variable is the projection of the entity.
     pub fn new(query: &str) -> Self {
         Self {
             query: query.to_string(),

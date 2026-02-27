@@ -2,9 +2,14 @@ use std::{fmt::Display, iter::repeat_n};
 
 use tokio_postgres::types::ToSql;
 
+/// A trait to mark types that can be converted to a `ToSql` type and also
+/// implement `Any` and `Sync`. This trait is used for the parameters of the
+/// queries.
 pub trait ToSqlAny: ToSql + std::any::Any + Sync {}
 impl<T: ToSql + std::any::Any + Sync> ToSqlAny for T {}
 
+/// A macro to create a vector of parameters. This macro is used to create the
+/// parameters of the queries.
 #[macro_export]
 macro_rules! params {
     ($( $x:expr ),*) => {
@@ -15,6 +20,8 @@ macro_rules! params {
     };
 }
 
+/// A structure to hold the boolean conditions of the queries.
+/// It is used to implement the precedence of the boolean logic operators.
 #[derive(Debug, Clone)]
 enum BooleanCondition {
     None,
@@ -47,6 +54,42 @@ impl BooleanCondition {
     }
 }
 
+/// A structure to hold the where condition of the queries.
+/// It is designed to be a composable structure to build the where condition of
+/// the queries alongside the according parameters, preserving the order of the
+/// parameters.
+/// The conditions are composed using the `and_where` and `or_where` methods
+/// with a default representation of `true` if no condition is provided.
+///
+/// # Examples
+/// ## Default condition
+/// The default condition is `true` which is useful when the conditions are
+/// passed as parameters.  This way, when no condition is provided, the
+/// query will be like `select * from table where true`. The condition will
+/// be ignored by the database planner and will return all the records.
+///
+/// ```rust
+/// use agrum::{WhereCondition, params};
+///
+/// let condition = WhereCondition::default();
+/// assert_eq!("true", condition.to_string());
+/// ```
+/// ## Building a condition
+/// The `WhereCondition` structure can be built using the `new` method to
+/// create a new condition with a SQL expression and the parameters.
+/// The `and_where` and `or_where` methods can be used to compose the conditions
+/// with the boolean logic operators.
+/// The `expand` method can be used to get the SQL expression and the parameters
+/// (consuming the instance).
+///
+/// ```rust
+/// use agrum::{WhereCondition, params};
+///
+/// let condition = WhereCondition::new("A = $?", params![1_i32]);
+/// let condition = condition.and_where(WhereCondition::new("B = $?", params![2_i32]));
+/// let condition = condition.or_where(WhereCondition::new("C = $?", params![3_i32]));
+/// assert_eq!("A = $? and B = $? or C = $?", condition.to_string());
+/// ```
 #[derive(Debug, Clone)]
 pub struct WhereCondition<'a> {
     condition: BooleanCondition,
@@ -69,6 +112,7 @@ impl Display for WhereCondition<'_> {
 }
 
 impl<'a> WhereCondition<'a> {
+    /// Create a new condition with a SQL expression and the parameters.
     pub fn new(expression: &str, parameters: Vec<&'a dyn ToSqlAny>) -> Self {
         Self {
             condition: BooleanCondition::Expression(expression.to_string()),
@@ -76,6 +120,8 @@ impl<'a> WhereCondition<'a> {
         }
     }
 
+    /// Expand the condition to a SQL expression and the parameters (consuming the instance).
+    /// This is normally used to get the SQL expression and the parameters.
     pub fn expand(self) -> (String, Vec<&'a dyn ToSqlAny>) {
         let expression = self.condition.expand();
         let parameters = self.parameters;
@@ -83,6 +129,8 @@ impl<'a> WhereCondition<'a> {
         (expression, parameters)
     }
 
+    /// Create a new condition with a `IN` SQL expression and the parameters.
+    /// It creates as many `$?` placeholders as the number of parameters.
     pub fn where_in(field: &str, parameters: Vec<&'a dyn ToSqlAny>) -> Self {
         let params: Vec<&str> = repeat_n("$?", parameters.len()).collect();
         let expression = format!("{} in ({})", field, params.join(", "));
@@ -93,6 +141,7 @@ impl<'a> WhereCondition<'a> {
         }
     }
 
+    /// Compose the condition with a `AND` boolean logic operator.
     pub fn and_where(mut self, mut condition: WhereCondition<'a>) -> Self {
         if condition.condition.is_none() {
             return self;
@@ -112,6 +161,7 @@ impl<'a> WhereCondition<'a> {
         self
     }
 
+    /// Compose the condition with a `OR` boolean logic operator.
     pub fn or_where(mut self, mut condition: WhereCondition<'a>) -> Self {
         if condition.condition.is_none() {
             return self;

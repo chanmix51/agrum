@@ -56,6 +56,8 @@ impl<T> Projection<T>
 where
     T: SqlEntity,
 {
+    /// Create a new projection with an alias. The alias is used to prefix the field names.
+    /// If the alias is empty, the projection will not be aliased.
     pub fn new(alias: &str) -> Self {
         let mut fields: Vec<ProjectionFieldDefinition> = Vec::new();
         let structure = T::get_structure();

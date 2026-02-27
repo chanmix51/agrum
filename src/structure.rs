@@ -16,6 +16,7 @@ pub struct StructureField {
 }
 
 impl StructureField {
+    /// Create a new structure field.
     pub fn new(name: &str, sql_type: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -23,6 +24,7 @@ impl StructureField {
         }
     }
 
+    /// Dump the structure field as a tuple of name and SQL type.
     pub fn dump(&self) -> (&str, &str) {
         (&self.name, &self.sql_type)
     }
@@ -45,6 +47,7 @@ impl Structure {
         Self { fields }
     }
 
+    /// Set a field in the structure.
     pub fn set_field(&mut self, name: &str, sql_type: &str) -> &mut Self {
         let name = name.to_string();
         let sql_type = sql_type.to_string();
@@ -55,10 +58,12 @@ impl Structure {
         self
     }
 
+    /// Get the fields of the structure.
     pub fn get_fields(&self) -> &Vec<StructureField> {
         &self.fields
     }
 
+    /// Get the names of the fields in the structure.
     pub fn get_names(&self) -> Vec<&str> {
         let names: Vec<&str> = self.fields.iter().map(|f| f.name.as_str()).collect();
 
@@ -66,7 +71,11 @@ impl Structure {
     }
 }
 
+/// A trait to mark types that are structured.
+/// A structured type is a type that has a structure.
+/// The structure is a list of fields with their names and SQL types.
 pub trait Structured {
+    /// Get the structure of the type.
     fn get_structure() -> Structure;
 }
 
@@ -77,7 +86,12 @@ pub enum HydrationError {
     InvalidData(String),
 
     /// Error while fetching data from the database.
-    FieldFetchFailed { error: PgError, field_index: usize },
+    FieldFetchFailed {
+        /// Error while fetching the data.
+        error: PgError,
+        /// Index of the field that failed to fetch.
+        field_index: usize,
+    },
 
     /// Error while fetching the Row from the database.
     RowFetchFailed(PgError),
@@ -98,8 +112,13 @@ impl Display for HydrationError {
 
 impl Error for HydrationError {}
 
+/// A trait to mark types that are SQL entities.
+/// An SQL entity is a type that has a structure, a projection and a hydration function.
 pub trait SqlEntity: Structured + Sized {
+    /// Get the projection of the entity.
     fn get_projection() -> Projection<Self>;
+
+    /// Hydrate the entity from a row.
     fn hydrate(row: &Row) -> Result<Self, HydrationError>;
 }
 

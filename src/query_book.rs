@@ -2,12 +2,62 @@ use std::{collections::HashMap, iter::repeat_n};
 
 use crate::{SqlEntity, SqlQuery, ToSqlAny, WhereCondition};
 
+/// A trait to mark types that are query books.
+/// Query books are responsible of building the queries that will be sent to the
+/// database server. This is the place where SQL templates are defined and
+/// populated with the parameters. By essence, a QueryBook takes its data from a SQL source
+/// and defines the SQL computation that will return the data.
+///
+/// The example shown therafter could be brought by the `ReadQueryBook` trait
+/// and is presented here for the sake of example.
+///
+/// # Examples
+/// ```rust
+/// use std::marker::PhantomData;
+/// use uuid::Uuid;
+/// use agrum::{QueryBook, SqlEntity, SqlQuery, ToSqlAny, WhereCondition};
+///
+/// #[derive(Default)]
+/// struct CompanyQueryBook<T: SqlEntity> {
+///     _phantom: PhantomData<T>,
+/// }
+///
+/// impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
+///     fn get_sql_source(&self) -> &'static str {
+///         "some_schema.company"
+///     }
+/// }
+///
+/// impl<T: SqlEntity> CompanyQueryBook<T> {
+///     fn get_by_id<'a>(&self, company_id: &'a Uuid) -> SqlQuery<'a, T> {
+///         self.select(WhereCondition::new("company_id = $?", vec![company_id]))
+///     }
+///
+///     fn get_sql_definition(&self) -> &'static str {
+///         "select {:projection:} from {:source:} where {:condition:}"
+///     }
+///
+///     fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
+///         let mut query = SqlQuery::new(self.get_sql_definition());
+///         let (conditions, parameters) = conditions.expand();
+///         query
+///             .set_variable("projection", &T::get_projection().to_string())
+///             .set_variable("source", self.get_sql_source())
+///             .set_variable("condition", &conditions.to_string())
+///             .set_parameters(parameters);
+///         query
+///     }
+/// }
+/// ```
 pub trait QueryBook<T: SqlEntity> {
     /// Return the definition of the SQL data source.
     /// It could be a table name or a view name or a values list or function or
     /// even a sub-query.
     fn get_sql_source(&self) -> &'static str;
 }
+
+/// A trait that marks QueryBooks that perform simple `select {:projection:}
+/// from {:source:} where {:condition:}` queries.
 pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
     /// Return the definition of the SQL query.
     /// It could be a select statement or an insert statement or a update statement or a delete statement.
@@ -15,6 +65,10 @@ pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
         "select {:projection:} from {:source:} where {:condition:}"
     }
 
+    /// Create a new select query with the given conditions.
+    /// The query will be built using the definition returned by the `get_sql_definition` method.
+    /// The projection will be the projection of the entity returned by the `get_projection` method.
+    /// The source will be the source returned by the `get_sql_source` method.
     fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
@@ -28,11 +82,20 @@ pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 }
 
+/// A trait that marks QueryBooks that perform `delete from {:source:} where
+/// {:condition:} returning {:projection:}` queries.  These queries actually
+/// return the deleted entities.
 pub trait DeleteQueryBook<T: SqlEntity>: QueryBook<T> {
+    /// Definition of the delete query.
     fn get_sql_definition(&self) -> &'static str {
         "delete from {:source:} where {:condition:} returning {:projection:}"
     }
 
+    /// Create a new delete query with the given conditions.
+    /// The query will be built using the definition returned by the `get_sql_definition` method.
+    /// The source will be the source returned by the `get_sql_source` method.
+    /// The conditions will be the conditions passed to the method.
+    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn delete<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
@@ -45,11 +108,20 @@ pub trait DeleteQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 }
 
+/// A trait that marks QueryBooks that perform simple aSQL update queries
+/// These queries actually return the updated entities.
 pub trait UpdateQueryBook<T: SqlEntity>: QueryBook<T> {
+    /// Definition of the delete query.
     fn get_sql_definition(&self) -> &'static str {
         "update {:source:} set {:updates:} where {:condition:} returning {:projection:}"
     }
 
+    /// Create a new update query with the given updates and conditions.
+    /// The query will be built using the definition returned by the `get_sql_definition` method.
+    /// The source will be the source returned by the `get_sql_source` method.
+    /// The updates will be the updates passed to the method.
+    /// The conditions will be the conditions passed to the method.
+    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn update<'a>(
         &self,
         updates: HashMap<&'a str, &'a dyn ToSqlAny>,
@@ -79,11 +151,20 @@ pub trait UpdateQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 }
 
+/// A trait that marks QueryBooks that perform SQL insert queries.
+/// These queries actually return the inserted entities.
 pub trait InsertQueryBook<T: SqlEntity>: QueryBook<T> {
+    /// Definition of the insert query.
     fn get_sql_definition(&self) -> &'static str {
         "insert into {:source:} ({:structure:}) values ({:values:}) returning {:projection:}"
     }
 
+    /// Create a new insert query with the given values.
+    /// The query will be built using the definition returned by the `get_sql_definition` method.
+    /// The source will be the source returned by the `get_sql_source` method.
+    /// The structure will be the structure of the entity returned by the `get_structure` method.
+    /// The values will be the values passed to the method.
+    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn insert<'a>(&self, values: HashMap<&'a str, &'a dyn ToSqlAny>) -> SqlQuery<'a, T> {
         // Build column list and parameter list following the entity structure
         let structure = <T as crate::Structured>::get_structure();

@@ -8,13 +8,15 @@ use crate::{Result, SqlEntity, SqlQuery};
 use futures_core::Stream;
 use tokio_postgres::{RowStream, Transaction as TokioTransaction, types::ToSql};
 
+/// A stream of entities.
 pub struct EntityStream<T: SqlEntity> {
     stream: Pin<Box<RowStream>>,
     _phantom: PhantomData<T>,
 }
 
 impl<T: SqlEntity> EntityStream<T> {
-    pub fn new(stream: RowStream) -> Self {
+    /// Create a new stream of entities.
+    pub(crate) fn new(stream: RowStream) -> Self {
         Self {
             stream: Box::pin(stream),
             _phantom: PhantomData,
@@ -43,25 +45,33 @@ impl<T: SqlEntity> Stream for EntityStream<T> {
     }
 }
 
+/// A transaction wrapper.
+/// This is mainly to enforce the transaction management by the caller.
+/// There is a bit of cabling in the query method to pass the parameters and
+/// instantiate the stream.
 pub struct Transaction<'a> {
     transaction: TokioTransaction<'a>,
 }
 
 impl<'a> Transaction<'a> {
+    /// create an open transaction.
     pub async fn start(transaction: TokioTransaction<'a>) -> Self {
         Self { transaction }
     }
 
+    /// Commit the transaction.
     pub async fn commit(self) -> Result<()> {
         self.transaction.commit().await?;
         Ok(())
     }
 
+    /// Rollback the transaction.
     pub async fn rollback(self) -> Result<()> {
         self.transaction.rollback().await?;
         Ok(())
     }
 
+    /// Query the database with a query and return a stream of entities.
     pub async fn query<E: SqlEntity>(&self, query: SqlQuery<'a, E>) -> Result<EntityStream<E>> {
         let (statement, parameters) = query.expand();
         let parameters: Vec<&dyn ToSql> = parameters.into_iter().map(|p| p as &dyn ToSql).collect();
