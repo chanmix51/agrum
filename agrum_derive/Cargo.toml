@@ -1,0 +1,16 @@
+[package]
+name = "agrum_derive"
+version = "0.4.0"
+authors = ["Grégoire HUBERT <hubert.greg@gmail.com>"]
+edition = "2024"
+license-file = "../LICENSE.txt"
+description = "Derive macros for agrum SQL entities."
+repository = "https://github.com/chanmix51/agrum"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["derive"] }

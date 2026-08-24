@@ -66,9 +66,6 @@ pub trait ReadQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 
     /// Create a new select query with the given conditions.
-    /// The query will be built using the definition returned by the `get_sql_definition` method.
-    /// The projection will be the projection of the entity returned by the `get_projection` method.
-    /// The source will be the source returned by the `get_sql_source` method.
     fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
@@ -92,10 +89,6 @@ pub trait DeleteQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 
     /// Create a new delete query with the given conditions.
-    /// The query will be built using the definition returned by the `get_sql_definition` method.
-    /// The source will be the source returned by the `get_sql_source` method.
-    /// The conditions will be the conditions passed to the method.
-    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn delete<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
         let mut query = SqlQuery::new(self.get_sql_definition());
         let (conditions, parameters) = conditions.expand();
@@ -108,20 +101,16 @@ pub trait DeleteQueryBook<T: SqlEntity>: QueryBook<T> {
     }
 }
 
-/// A trait that marks QueryBooks that perform simple aSQL update queries
+/// A trait that marks QueryBooks that perform simple SQL `update {:source:} set
+/// {:updates:} where {:condition:} returning {:projection:}` queries.
 /// These queries actually return the updated entities.
 pub trait UpdateQueryBook<T: SqlEntity>: QueryBook<T> {
-    /// Definition of the delete query.
+    /// Definition of the update query.
     fn get_sql_definition(&self) -> &'static str {
         "update {:source:} set {:updates:} where {:condition:} returning {:projection:}"
     }
 
     /// Create a new update query with the given updates and conditions.
-    /// The query will be built using the definition returned by the `get_sql_definition` method.
-    /// The source will be the source returned by the `get_sql_source` method.
-    /// The updates will be the updates passed to the method.
-    /// The conditions will be the conditions passed to the method.
-    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn update<'a>(
         &self,
         updates: HashMap<&'a str, &'a dyn ToSqlAny>,
@@ -154,17 +143,12 @@ pub trait UpdateQueryBook<T: SqlEntity>: QueryBook<T> {
 /// A trait that marks QueryBooks that perform SQL insert queries.
 /// These queries actually return the inserted entities.
 pub trait InsertQueryBook<T: SqlEntity>: QueryBook<T> {
-    /// Definition of the insert query.
+    /// Definition of the SQL insert query.
     fn get_sql_definition(&self) -> &'static str {
         "insert into {:source:} ({:structure:}) values ({:values:}) returning {:projection:}"
     }
 
     /// Create a new insert query with the given values.
-    /// The query will be built using the definition returned by the `get_sql_definition` method.
-    /// The source will be the source returned by the `get_sql_source` method.
-    /// The structure will be the structure of the entity returned by the `get_structure` method.
-    /// The values will be the values passed to the method.
-    /// The projection will be the projection of the entity returned by the `get_projection` method.
     fn insert<'a>(&self, values: HashMap<&'a str, &'a dyn ToSqlAny>) -> SqlQuery<'a, T> {
         // Build column list and parameter list following the entity structure
         let structure = <T as crate::Structured>::get_structure();

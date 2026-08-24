@@ -17,11 +17,25 @@ mod query;
 mod query_book;
 mod structure;
 
+/// Derive [`SqlEntity`] and [`Structured`] from a struct's fields.
+///
+/// Field names are used as column names. SQL types are inferred from the Rust
+/// field types (`Uuid` → `uuid`, `String` → `text`, and so on).
+pub use agrum_derive::SqlEntity;
 pub use condition::*;
 pub use connection::*;
 pub use projection::*;
 pub use query::*;
 pub use query_book::*;
 pub use structure::*;
+
+// Re-exports used by `#[derive(SqlEntity)]` so generated code can name
+// `tokio_postgres::Row` via `::agrum` without a direct tokio-postgres dependency.
+// It is kept out of rustdoc; it is not meant for people to import.
+#[doc(hidden)]
+#[allow(missing_docs)]
+pub mod __private {
+    pub use tokio_postgres::Row;
+}
 
 type Result<T> = anyhow::Result<T>;

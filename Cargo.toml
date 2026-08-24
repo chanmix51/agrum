@@ -9,8 +9,11 @@ description = "This is an OMM database layer."
 repository = "https://github.com/chanmix51/agrum"
 keywords = ["database", "postgres"]
 
+[workspace]
+members = ["agrum_derive"]
 
 [dependencies]
+agrum_derive = { path = "agrum_derive", version = "0.4.0" }
 anyhow = "1.0.100"
 bb8 = "0.9.1"
 bb8-postgres = "0.9.0"

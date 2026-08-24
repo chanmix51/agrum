@@ -40,9 +40,10 @@ below show the state of the crate as is.
  
  It is a way of making the database layer testable: be able to
  test what query is sent to the server for each particular business demand. 
- It uses the `WhereCondition` internally to ease conditions composition.
+ It uses the `WhereCondition` internally to ease conditions composition with the
+ according parameters.
 
- With the service layer shown above, the corresponding QueryBook would be:
+Here is an example of a simple query book that creates simple `select` queries.
 
  ```rust
 #[derive(Default)]
@@ -59,20 +60,6 @@ impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
 impl<T: SqlEntity> CompanyQueryBook<T> {
    pub fn get_by_id<'a>(&self, company_id: &'a Uuid) -> SqlQuery<'a, T> {
       self.select(WhereCondition::new("company_id = $?", vec![company_id]))
-   }
-
-   // This method could be brung by the `ReadQueryBook` trait, it is implemented
-   // here for the sake of showing the internals.
-   pub fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T>
-      let mut query = SqlQuery::new("select {:projection:} from {:source:} where {:condition:}");
-      let (conditions, parameters) = conditions.expand();
-      query
-         .set_variable("projection", &T::get_projection().expand())
-         .set_variable("source", self.get_sql_source())
-         .set_variable("condition", &conditions.to_string())
-         .set_parameters(parameters);
-
-      query
    }
 }
  ```
