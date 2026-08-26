@@ -32,6 +32,59 @@ The ideas behind Agrum are:
 For now, Agrum is still under heavy work and is not production ready. Examples
 below show the state of the crate as is.
 
+### SQL Entities
+
+SQL entities are entities returned by the queries. This means they are tied to a
+particular projection. This is defined by the `SqlEntity` trait. Most of the
+time the properties of the structure have the same name as the database
+columns. The trait can be derived from the structure:
+
+```rust
+#[derive(SqlEntity)]
+pub struct Company {
+    pub company_id: Uuid,
+    pub name: String,
+    pub default_address_id: Uuid,
+}
+```
+
+This is the equivalent of writing the following:
+```rust
+pub struct Company {
+    pub company_id: Uuid,
+    pub name: String,
+    pub default_address_id: Uuid,
+}
+
+impl SqlEntity for Company {
+    // Since `SqlEntity` requires the `Structured` trait,
+    // projection can follow the structure of the entity.
+    fn get_projection() -> Projection<Company> {
+        Projection::default()
+    }
+
+    // How to hydrate the structure from the database
+    fn hydrate(row: &Row) -> Result<Self, HydrationError> {
+        Ok(Self {
+            company_id: row.get("company_id"),
+            name: row.get("name"),
+            default_address_id: row.get("default_address_id"),
+        })
+    }
+}
+
+impl Structured for Company {
+    // according database structure of this Rust structure.
+    fn get_structure() -> Structure {
+        Structure::new(&[
+            ("company_id", "uuid"),
+            ("name", "text"),
+            ("default_address_id", "uuid"),
+        ])
+    }
+}
+```
+
 ### QueryBooks
 
  QueryBooks are responsible of building the queries that will be sent to the
@@ -56,6 +109,10 @@ impl<T: SqlEntity> QueryBook<T> for CompanyQueryBook<T> {
         "some_schema.company" // fully qualified name of the table
     }
 }
+
+// ↓ This implements the `select` method, creating the query as
+// ↓ `select {:projection:} from {:source:} where {:condition:}`.
+impl<T: SqlEntity> ReadQueryBook<T> for CompanyQueryBook<T> {}
 
 impl<T: SqlEntity> CompanyQueryBook<T> {
    pub fn get_by_id<'a>(&self, company_id: &'a Uuid) -> SqlQuery<'a, T> {
@@ -83,54 +140,53 @@ let condition = WhereCondition::new("stuff_id=$?", vec![&1_u32])
 // will expand to `stuff_id=$? and (substuff_id in ($?, $?, $?) or is_alone)`
 ```
 
-### SQL Entities
+### Custom SQL Queries
 
-SQL entities are entities returned by the queries. This means they are tied to a
-particular projection. The entities associated with the Query Book presented
-above are the following:
+Obviously the queries are not always as simple as `SELECT` from one table. In
+this case the SQL is written as a template where placeholders are replaced by
+actual values. Here is an example of a custom query book:
 
 ```rust
-pub struct Company {
-    pub company_id: Uuid,
-    pub name: String,
-    pub default_address_id: Uuid,
-}
-
-impl SqlEntity for Company {
-    fn get_projection() -> Projection<Company> {
-        Projection::default()
+impl<T: SqlEntity> CompanyWithContactsCountQueryBook<T> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
     }
 
-    fn hydrate(row: &Row) -> Result<Self, HydrationError> {
-        Ok(Self {
-            company_id: row.get("company_id"),
-            name: row.get("name"),
-            default_address_id: row.get("default_address_id"),
-        })
+    fn get_sql_definition(&self) -> &'static str {
+        r#"select {:projection:}
+  from {:source:} as company
+    left join {:contact_source:} as contact
+      on company.company_id = contact.company_id
+  where {:condition:}
+  group by company.company_id"#
     }
-}
 
-impl Structured for Company {
-    fn get_structure() -> Structure {
-        Structure::new(&[
-            ("company_id", "uuid"),
-            ("name", "text"),
-            ("default_address_id", "uuid"),
-        ])
+    fn select<'a>(&self, conditions: WhereCondition<'a>) -> SqlQuery<'a, T> {
+        let mut query = SqlQuery::new(self.get_sql_definition());
+        let (conditions, parameters) = conditions.expand();
+        query
+            .set_parameters(parameters)
+            .set_variable("projection", &T::get_projection().to_string())
+            .set_variable("source", self.get_sql_source())
+            .set_variable(
+                "contact_source",
+                ContactQueryBook::<T>::default().get_sql_source(),
+            )
+            .set_variable("condition", &conditions);
+        query
+    }
+
+    pub fn select_by_id<'a>(&self, id: &'a Uuid) -> SqlQuery<'a, T> {
+        self.select(WhereCondition::new("company.company_id = $?", vec![id]))
     }
 }
 ```
 
-Ideally, the goal would be something as simple as:
-
-```rust
-#[derive(SqlEntity)]
-pub struct Company {
-    pub company_id: Uuid,
-    pub name: String,
-    pub default_address_id: Uuid,
-}
-```
+Please note that `WhereCondition` is only used internally. Public methods takes
+conditions as dedicated parameters because they are business oriented and
+propose an agnostic interface.
 
 ### Nested SQL entities
 
