@@ -1,6 +1,6 @@
 [package]
 name = "agrum"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Grégoire HUBERT <hubert.greg@gmail.com>"]
 edition = "2024"
 readme = "README.md"
